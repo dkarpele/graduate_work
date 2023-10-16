@@ -1,0 +1,3 @@
+/.env
+/notifications_api/src/.env
+/email_worker/.env

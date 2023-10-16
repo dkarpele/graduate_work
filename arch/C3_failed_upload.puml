@@ -1,0 +1,23 @@
+@startuml
+skinparam monochrome reverse
+
+==Failed upload==
+
+Scheduler <--> Postgres_OR_redis: Scheduler gets file\ndata from DB
+activate Postgres_OR_redis
+activate Scheduler
+Scheduler -> Postgres_OR_redis: Update file status
+deactivate Postgres_OR_redis
+Scheduler -> S3: Upload File
+deactivate Scheduler
+
+activate S3
+S3 <- CloudFront: Use CloudFront to show file
+activate CloudFront
+CloudFront <- API_service_get: Gets File from CDN
+activate API_service_get
+API_service_get <-> Client: Client gets expected file
+deactivate CloudFront
+deactivate API_service_get
+deactivate S3
+@enduml

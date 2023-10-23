@@ -1,3 +1,4 @@
 /.env
-/notifications_api/src/.env
-/email_worker/.env
+/.env.minio.json
+/cdn_api/src/.env
+/cdn_api/src/.env.minio.json

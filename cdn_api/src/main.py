@@ -9,10 +9,16 @@ from api.v1 import films
 from core.config import settings
 from core.logger import LOGGING
 from db import elastic, redis, minio_s3
+from db.scheduler import jobs, get_scheduler
 
 
 async def startup():
-    pass
+    # Connecting to scheduler
+    job = await get_scheduler()
+    await jobs(job)
+    job.start()
+    logging.info(f'List of scheduled jobs: {job.get_jobs()}')
+
     # minio_s3.minio_s3 = minio_s3.MinioS3(endpoint="127.0.0.1:9000",
     #                                      access_key="minioadmin",
     #                                      secret_key="minioadmin",

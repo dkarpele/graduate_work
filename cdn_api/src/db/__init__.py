@@ -1,4 +1,8 @@
 from abc import ABC, abstractmethod
+
+from aiohttp import ClientResponse
+from miniopy_async.helpers import ObjectWriteResult
+from urllib3.response import HTTPResponse
 from typing import Optional
 
 
@@ -24,11 +28,19 @@ class AbstractS3(ABC):
         pass
 
     @abstractmethod
-    async def get_object(self, bucket_name: str, object_name: str) -> bool:
+    async def get_object(self, bucket_name: str, object_name: str) \
+            -> bool | ClientResponse:
         pass
 
     @abstractmethod
     async def copy_object(self, source: str, destination: str) -> None:
+        pass
+
+    @abstractmethod
+    async def fget_object(self,
+                          bucket_name: str,
+                          object_name: str,
+                          file_name) -> bool:
         pass
 
 

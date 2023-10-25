@@ -1,16 +1,20 @@
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from json import JSONDecodeError, loads
 from typing import Any, Type
 
-import aiofiles
-import aiohttp
-from aiohttp import ClientConnectorError
+import magic
+from aiofiles import os, open
+from aiohttp import ClientConnectorError, ClientSession
+from aioshutil import rmtree
 from dotenv import load_dotenv
 from geopy.distance import distance
 
+from core.config import settings
 from db import AbstractS3
+from db.aws_s3 import S3MultipartUpload
 from helpers.exceptions import locations_not_available
 
 load_dotenv()
@@ -37,7 +41,7 @@ async def get_active_nodes(
     :return: Collection of {node name: Node}
     """
     try:
-        async with aiofiles.open(file_path, "r") as file:
+        async with open(file_path, "r") as file:
             j = loads(await file.read())
             return {k: Node(**v) for k, v in j.items()
                     if v['is_active'] == "True"}
@@ -71,7 +75,7 @@ async def find_closest_node(user_ip: str,
     :return: Node object
     """
 
-    async with aiohttp.ClientSession() as session:
+    async with ClientSession() as session:
         try:
             url_ip_location = f"https://ipapi.co/{user_ip}/json/"
             async with session.get(url_ip_location) as response:
@@ -134,9 +138,57 @@ async def object_exists(client: Type[AbstractS3],
     return object_found
 
 
+async def copy_object_to_node(client: Type[AbstractS3],
+                              object_name: str,
+                              origin_node: Node,
+                              edge_node: Node) -> None:
+    origin_client: AbstractS3 = client(
+        endpoint_url='http://' + origin_node.endpoint,
+        aws_access_key_id=origin_node.access_key_id,
+        aws_secret_access_key=origin_node.secret_access_key,
+        verify=False)
+
+    dir_name = f'/tmp/{datetime.now().isoformat()}'
+    try:
+        await os.makedirs(dir_name, exist_ok=True)
+        file_path = f'{dir_name}/{object_name}'
+        await origin_client.fget_object(
+            settings.bucket_name,
+            object_name,
+            file_path)
+
+        edge_client_dict = {
+            'endpoint_url': 'http://' + edge_node.endpoint,
+            'aws_access_key_id': edge_node.access_key_id,
+            'aws_secret_access_key': edge_node.secret_access_key,
+            'verify': False}
+        content_type = magic.from_file(file_path,
+                                       mime=True)
+        edge_client = S3MultipartUpload(settings.bucket_name,
+                                        object_name,
+                                        file_path,
+                                        content_type,
+                                        **edge_client_dict)
+        async with edge_client.client as s3:
+            await edge_client.abort_all(s3)
+            # create new multipart upload
+            mpu_id = await edge_client.create(s3)
+            logging.info(f"Starting upload with id={mpu_id}")
+            # upload parts
+            parts = await edge_client.upload(s3, mpu_id)
+            logging.info(await edge_client.complete(s3, mpu_id, parts))
+
+    except BaseException as e:
+        logging.error(e)
+    finally:
+        await rmtree(dir_name, ignore_errors=True)
+        logging.info(f"Removing temp dir {dir_name}")
+
+
 async def main():
     nodes = await get_active_nodes("../.env.minio.json")
     print(await find_closest_node('137.0.0.1', nodes))
+
 
 if __name__ == "__main__":
     asyncio.run(main())

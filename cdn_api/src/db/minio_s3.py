@@ -4,7 +4,8 @@ from datetime import timedelta
 
 import aiohttp
 from miniopy_async import Minio, S3Error
-from urllib3 import HTTPResponse
+from miniopy_async.helpers import ObjectWriteResult
+from urllib3.response import HTTPResponse
 
 from db import AbstractS3
 
@@ -43,7 +44,7 @@ class MinioS3(AbstractS3):
                                                         session)
 
                 logging.info(f"Found '{object_name}' in bucket "
-                             f"'{bucket_name}'")
+                             f"'{bucket_name}' in S3 '{response.host}'")
                 return response
         except S3Error:
             logging.error(f"{object_name} doesn't exist in bucket "
@@ -54,6 +55,10 @@ class MinioS3(AbstractS3):
         logging.info('COPY OBJECT FUNCTION before sleep')
         await asyncio.sleep(10)
         logging.info('COPY OBJECT FUNCTION AFTER sleep')
+
+    async def fget_object(self, bucket_name: str, object_name: str,
+                          file_name) -> bool:
+        pass
 
 
 minio_s3: MinioS3 | None = None

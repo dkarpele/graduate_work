@@ -1,13 +1,18 @@
 import logging
+from datetime import datetime, timedelta
 
+from apscheduler.schedulers import SchedulerAlreadyRunningError
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from core.config import settings
 from db.minio_s3 import MinioS3
+from db.aws_s3 import AWSS3
+from db.scheduler import get_scheduler, jobs
 from helpers.exceptions import object_not_exist
-from helpers.helper import get_active_nodes, find_closest_node, object_exists, \
-    origin_is_alive
+from helpers.helper import (get_active_nodes, find_closest_node,
+                            object_exists, origin_is_alive,
+                            copy_object_to_node)
 
 router = APIRouter()
 
@@ -40,15 +45,26 @@ async def film_url(
     secret_key = closest_node.secret_access_key
 
     # object doesn't exist on edge location
-    if not object_ and closest_node.alias != 'local':
+    if not object_ and closest_node.alias != 'origin':
         # Use endpoint and creds from origin to create url
         origin_node = await origin_is_alive(active_nodes)
         endpoint = origin_node.endpoint
         access_key = origin_node.access_key_id
         secret_key = origin_node.secret_access_key
+
         # Copy object to closest_node using Scheduler
+        job = await get_scheduler()
+        await jobs(job,
+                   copy_object_to_node,
+                   args=(AWSS3, film_title, origin_node, closest_node),
+                   next_run_time=datetime.now() + timedelta(seconds=5))
+        try:
+            job.start()
+        except SchedulerAlreadyRunningError as e:
+            logging.info(e)
+
     # object doesn't exist on origin location
-    elif not object_ and closest_node.alias == 'local':
+    elif not object_ and closest_node.alias == 'origin':
         # Nothing to be copied. Raise exception
         raise object_not_exist(film_title, settings.bucket_name)
 

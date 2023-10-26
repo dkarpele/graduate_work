@@ -2,6 +2,7 @@ import asyncio
 import logging
 from datetime import timedelta
 
+import aiobotocore
 import aiohttp
 from aioboto3 import Session
 from aiofiles import open
@@ -12,6 +13,7 @@ from miniopy_async.helpers import ObjectWriteResult
 from urllib3.response import HTTPResponse
 from botocore.errorfactory import BaseClientExceptions
 
+from core.config import settings
 from db import AbstractS3
 
 
@@ -30,7 +32,7 @@ class AWSS3(AbstractS3):
         pass
 
     async def get_object(self, bucket_name: str,
-                         object_name: str) -> bool | ClientResponse:
+                         object_name: str, *args, **kwargs) -> bool | ClientResponse:
         pass
 
     async def copy_object(self, source: str, destination: str) -> None:
@@ -46,8 +48,8 @@ class AWSS3(AbstractS3):
                                        object_name,
                                        file_name)
 
-                logging.info(f"Object '{object_name}' downloaded from bucket "
-                             f"'{bucket_name}' as '{file_name}'")
+            logging.info(f"Object '{object_name}' downloaded from bucket "
+                         f"'{bucket_name}' to '{file_name}'")
 
         except BaseException as e:
             logging.error(e)
@@ -61,32 +63,27 @@ class S3MultipartUpload(AWSS3):
     # AWS throws EntityTooSmall error for parts smaller than 5 MB
     PART_MINIMUM = int(5e6)
 
-    def __init__(self, bucket, key, local_path, content_type,
-                 part_size=int(6e6), profile_name=None,
-                 region_name="eu-west-1", verbose=False, *args, **kwargs):
+    def __init__(self,
+                 bucket: str,
+                 key: str,
+                 local_path: str | None = None,
+                 content_type: str | None = None,
+                 total_bytes: int = 0,
+                 part_size: int = settings.upload_part_size,
+                 *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.bucket = bucket
         self.key = key
         self.path = local_path
         self.content_type = content_type
-        self.total_bytes = os.stat(local_path).st_size
+        if self.path:
+            self.total_bytes = os.stat(local_path).st_size
+        else:
+            self.total_bytes = total_bytes
         self.part_bytes = part_size
         assert part_size > self.PART_MINIMUM
         # assert (self.total_bytes % part_size == 0
         #         or self.total_bytes % part_size > self.PART_MINIMUM)
-        # self.s3 = boto3.client('s3',
-        #                        endpoint_url='http://192.168.16.5:9000',
-        #                        aws_access_key_id='minioadmin',
-        #                        aws_secret_access_key='minioadmin',
-        #                        aws_session_token=None,
-        #                        config=boto3.session.Config(
-        #                            signature_version='s3v4'),
-        #                        verify=False
-        #                        )
-        # self.s3 = boto3.session.Session(
-        #     profile_name=profile_name, region_name=region_name).client("s3")
-        # if verbose:
-        #     boto3.set_stream_logger(name="botocore")
 
     async def abort_all(self, s3):
         mpus = await s3.list_multipart_uploads(Bucket=self.bucket)
@@ -121,9 +118,9 @@ class S3MultipartUpload(AWSS3):
 
     @staticmethod
     def as_percent(num, denom):
-        return float(num) / float(denom) * 100.0
+        return round(float(num) / float(denom) * 100.0, 2)
 
-    async def upload(self, s3, mpu_id, parts=None):
+    async def upload_file(self, s3, mpu_id, parts=None):
         if parts is None:
             parts = []
         uploaded_bytes = 0
@@ -156,19 +153,45 @@ class S3MultipartUpload(AWSS3):
                     parts.append({"PartNumber": i, "ETag": part["ETag"]})
 
                 uploaded_bytes += len(data)
-                logging.info(f"{uploaded_bytes} of {self.total_bytes} bytes "
-                             f"uploaded "
-                             f"{self.as_percent(uploaded_bytes, self.total_bytes)}%")
+                logging.info(
+                    f"""{uploaded_bytes} of {self.total_bytes} bytes \
+                uploaded {self.as_percent(uploaded_bytes,
+                                          self.total_bytes)}%""")
                 i += 1
         return parts
 
-    async def complete(self, s3, mpu_id, parts):
-        print("complete: parts=" + str(parts))
-        result = await s3.complete_multipart_upload(
+    async def upload_bytes(self, s3, mpu_id, data, part_number=1, parts=None):
+        if parts is None:
+            parts = []
+        if len(parts) >= part_number:
+            # Already uploaded, go to the next one
+            part = parts[part_number - 1]
+            if len(data) != part["Size"]:
+                raise Exception("Size mismatch: local " + str(
+                    len(data)) + ", remote: " + str(part["Size"]))
+            parts[part_number - 1] = {k: part[k] for k in ('PartNumber', 'ETag')}
+        else:
+            part = await s3.upload_part(
+                # We could include `ContentMD5='hash'` to discover
+                # if data has been corrupted upon transfer
+                Body=data,
                 Bucket=self.bucket,
                 Key=self.key,
                 UploadId=mpu_id,
-                MultipartUpload={"Parts": parts})
+                PartNumber=part_number,
+            )
+
+            parts.append({"PartNumber": part_number, "ETag": part["ETag"]})
+
+        return parts
+
+    async def complete(self, s3, mpu_id, parts):
+        logging.info(f"complete: parts={str(parts)}")
+        result = await s3.complete_multipart_upload(
+            Bucket=self.bucket,
+            Key=self.key,
+            UploadId=mpu_id,
+            MultipartUpload={"Parts": parts})
         return result
 
 

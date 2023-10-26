@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     host: str = Field(..., env='HOST_CDN')
     port: int = Field(..., env='PORT_CDN')
     bucket_name: str = Field(..., env='BUCKET_NAME')
+    upload_part_size: int = Field(..., env='UPLOAD_PART_SIZE')
     # host_auth: str = Field(..., env='HOST_AUTH')
     # port_auth: str = Field(..., env='PORT_AUTH')
     # cache_expire_in_seconds: int = Field(..., env='CACHE_EXPIRE_IN_SECONDS')

@@ -10,6 +10,7 @@ httptools==0.6.1
 aiohttp==3.8.6
 boto3==1.28.68
 aioboto3==11.3.1
+aiobotocore==2.7.0
 miniopy_async==1.16
 geopy==2.4.0
 aiofiles==23.2.1

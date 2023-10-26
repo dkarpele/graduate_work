@@ -7,7 +7,7 @@ from typing import Any, Type
 
 import magic
 from aiofiles import os, open
-from aiohttp import ClientConnectorError, ClientSession
+from aiohttp import ClientConnectorError, ClientSession, ClientResponse
 from aioshutil import rmtree
 from dotenv import load_dotenv
 from geopy.distance import distance
@@ -15,6 +15,7 @@ from geopy.distance import distance
 from core.config import settings
 from db import AbstractS3
 from db.aws_s3 import S3MultipartUpload
+from db.scheduler import get_scheduler
 from helpers.exceptions import locations_not_available
 
 load_dotenv()
@@ -142,6 +143,7 @@ async def copy_object_to_node(client: Type[AbstractS3],
                               object_name: str,
                               origin_node: Node,
                               edge_node: Node) -> None:
+    result = False
     origin_client: AbstractS3 = client(
         endpoint_url='http://' + origin_node.endpoint,
         aws_access_key_id=origin_node.access_key_id,
@@ -175,14 +177,46 @@ async def copy_object_to_node(client: Type[AbstractS3],
             mpu_id = await edge_client.create(s3)
             logging.info(f"Starting upload with id={mpu_id}")
             # upload parts
-            parts = await edge_client.upload(s3, mpu_id)
-            logging.info(await edge_client.complete(s3, mpu_id, parts))
+            parts = await edge_client.upload_file(s3, mpu_id)
+            result = await edge_client.complete(s3, mpu_id, parts)
+            logging.info(result)
 
     except BaseException as e:
         logging.error(e)
     finally:
-        await rmtree(dir_name, ignore_errors=True)
+        if result:
+            await rmtree(dir_name, ignore_errors=True)
         logging.info(f"Removing temp dir {dir_name}")
+
+
+async def multipart_upload(client: S3MultipartUpload,
+                           object_):
+    async with client.client as s3:
+        await client.abort_all(s3)
+        # create new multipart upload
+        mpu_id = await client.create(s3)
+        logging.info(f"Starting upload with id={mpu_id}")
+
+        # upload parts
+        parts = []
+        part_number = 1
+        uploaded_bytes = 0
+        while True:
+            data = await object_.read(settings.upload_part_size)
+            if not len(data):
+                break
+            parts.extend(await client.upload_bytes(s3,
+                                                   mpu_id,
+                                                   data,
+                                                   part_number))
+            uploaded_bytes += len(data)
+            logging.info(
+                f"""{uploaded_bytes} of {client.total_bytes} bytes \
+uploaded {client.as_percent(uploaded_bytes,
+                            client.total_bytes)}%""")
+            part_number += 1
+        logging.info(f"Upload completed with metadata: "
+                     f"{await client.complete(s3, mpu_id, parts)}")
 
 
 async def main():

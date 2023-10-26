@@ -13,6 +13,7 @@ from db.scheduler import jobs, get_scheduler
 
 
 async def startup():
+    pass
     # Connecting to scheduler
     job = await get_scheduler()
     await jobs(job)
@@ -30,6 +31,8 @@ async def startup():
 
 async def shutdown():
     pass
+    job = await get_scheduler()
+    job.shutdown()
     # await redis.redis.close()
     # await elastic.es.close()
 

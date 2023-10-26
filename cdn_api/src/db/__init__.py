@@ -12,8 +12,8 @@ class AbstractS3(ABC):
     """
 
     @abstractmethod
-    def __init__(self, **kwargs):
-        self.client: Optional
+    def __init__(self, *args, **kwargs):
+        self.client: Optional = None
 
     @abstractmethod
     async def get_url(self, *args, **kwargs) -> str:
@@ -28,8 +28,11 @@ class AbstractS3(ABC):
         pass
 
     @abstractmethod
-    async def get_object(self, bucket_name: str, object_name: str) \
-            -> bool | ClientResponse:
+    async def get_object(self,
+                         bucket_name: str,
+                         object_name: str,
+                         *args,
+                         **kwargs) -> bool | ClientResponse:
         pass
 
     @abstractmethod

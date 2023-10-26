@@ -1,25 +1,28 @@
 import logging
 from datetime import datetime, timedelta
 
+from typing import Annotated
+
+import magic
 from apscheduler.schedulers import SchedulerAlreadyRunningError
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, File, UploadFile
 from fastapi.responses import RedirectResponse
 
 from core.config import settings
 from db.minio_s3 import MinioS3
-from db.aws_s3 import AWSS3
+from db.aws_s3 import AWSS3, S3MultipartUpload
 from db.scheduler import get_scheduler, jobs
 from helpers.exceptions import object_not_exist
 from helpers.helper import (get_active_nodes, find_closest_node,
                             object_exists, origin_is_alive,
-                            copy_object_to_node)
+                            copy_object_to_node, multipart_upload)
 
 router = APIRouter()
 
 
 @router.get('/{film_title}',
-            summary="URL to preview film",
-            response_description="url",
+            summary="Get URL to preview film",
+            response_description="Redirects to url to preview film",
             )
 async def film_url(
         request: Request,
@@ -57,7 +60,7 @@ async def film_url(
         await jobs(job,
                    copy_object_to_node,
                    args=(AWSS3, film_title, origin_node, closest_node),
-                   next_run_time=datetime.now() + timedelta(seconds=5))
+                   next_run_time=datetime.now())
         try:
             job.start()
         except SchedulerAlreadyRunningError as e:
@@ -75,5 +78,30 @@ async def film_url(
 
     url = await client.get_url(bucket_name=settings.bucket_name,
                                object_name=film_title)
-
+    logging.info(f"URL created using endpoint '{endpoint}'")
     return RedirectResponse(url=url)
+
+
+@router.post('/upload_object',
+             summary="Upload object to storage",
+             )
+async def upload_object(
+        file_upload: UploadFile
+) -> None:
+    active_nodes = await get_active_nodes()
+    origin_node = await origin_is_alive(active_nodes)
+
+    origin_client_dict = {
+        'endpoint_url': 'http://' + origin_node.endpoint,
+        'aws_access_key_id': origin_node.access_key_id,
+        'aws_secret_access_key': origin_node.secret_access_key,
+        'verify': False}
+
+    origin_client: S3MultipartUpload = S3MultipartUpload(
+        settings.bucket_name,
+        file_upload.filename,
+        content_type=file_upload.content_type,
+        total_bytes=file_upload.size,
+        **origin_client_dict)
+
+    await multipart_upload(origin_client, file_upload)

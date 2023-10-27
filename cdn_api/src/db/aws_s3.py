@@ -31,9 +31,15 @@ class AWSS3(AbstractS3):
     async def bucket_exists(self, bucket_name) -> bool:
         pass
 
-    async def get_object(self, bucket_name: str,
-                         object_name: str, *args, **kwargs) -> bool | ClientResponse:
-        pass
+    async def get_object(self,
+                         bucket_name: str,
+                         object_name: str,
+                         *args, **kwargs) -> bool | ClientResponse:
+        async with self.client as s3:
+            s3_obj = await s3.get_object(Bucket=bucket_name,
+                                         Key=object_name)
+
+            return s3_obj
 
     async def copy_object(self, source: str, destination: str) -> None:
         pass

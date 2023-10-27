@@ -7,7 +7,7 @@ from typing import Any, Type
 
 import magic
 from aiofiles import os, open
-from aiohttp import ClientConnectorError, ClientSession, ClientResponse
+from aiohttp import ClientConnectorError, ClientSession
 from aioshutil import rmtree
 from dotenv import load_dotenv
 from geopy.distance import distance

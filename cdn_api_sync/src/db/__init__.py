@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
+from models.model import Model
+
 
 from aiohttp import ClientResponse
 from minio.datatypes import Object
@@ -55,6 +57,13 @@ class AbstractS3(ABC):
                     file_name) -> bool:
         pass
 
+    @abstractmethod
+    def remove_object(self,
+                      bucket_name: str,
+                      object_name: str,
+                      ):
+        pass
+
 
 class AbstractStorage(ABC):
     """
@@ -67,31 +76,33 @@ class AbstractStorage(ABC):
     """
 
     @abstractmethod
-    async def get_by_id(self, _id: str, index: str, model) -> Optional:
-        """
-        Абстрактный асинхронный метод для получения данных по id
-        :param _id: строка с id, по которому выполняется поиск
-        :param index: строковое название индекса, в котором выполняется поиск
-        :param model: тип модели, в котором возвращаются данные
-        :return: объект типа, заявленного в model
-        """
-        ...
+    def insert_data(
+            self,
+            insert: Model | dict,
+            collection: str,
+    ) -> None:
+        pass
 
     @abstractmethod
-    async def get_list(self, model, index: str, sort: str, search: dict,
-                       page: int, size: int) -> list | None:
-        """
-        Абстрактный асинхронный метод для получения списка данных
-        :param model: тип модели, в котором возвращаются данные
-        :param index: строковое название индекса, в котором выполняется поиск
-        :param sort: строка с названием атрибута, по которой необходима
-        сортировка
-        :param search: словарь с параметрами для поиска, если они необходимы
-        :param page: номер страницы
-        :param size: количество элементов на странице(в списке)
-        :return: список объектов типа model
-        """
-        ...
+    def get_data(
+            self,
+            query: dict | str,
+            collection: str,
+            projection: dict | None = None,
+            sort: tuple | None = None,
+            page: int | None = None,
+            size: int | None = None
+    ) -> list:
+        pass
+
+    @abstractmethod
+    def update_data(
+            self,
+            query: dict,
+            update: dict,
+            collection: str,
+    ) -> None:
+        pass
 
 
 class AbstractCache(ABC):

@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import orjson
 
 # Используем pydantic для упрощения работы при перегонке данных из json в
@@ -20,3 +22,15 @@ class Model(BaseModel):
         json_loads = orjson.loads
         json_dumps = orjson_dumps
         allow_population_by_field_name = True
+
+
+@dataclass
+class Node:
+    endpoint: str
+    alias: str
+    access_key_id: str
+    secret_access_key: str
+    city: str
+    latitude: float
+    longitude: float
+    is_active: str

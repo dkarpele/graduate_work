@@ -53,9 +53,7 @@ class MinioS3(AbstractS3):
                          f"'{bucket_name}' in S3 '{self.base_url.host}'")
             return response
         except S3Error as e:
-            logging.warning(f"{object_name} doesn't exist in bucket "
-                            f"{bucket_name}")
-            logging.warning(e)
+            logging.info(e)
             return False
 
     def stat_object(self,
@@ -70,6 +68,17 @@ class MinioS3(AbstractS3):
     def fget_object(self, bucket_name: str, object_name: str,
                     file_name) -> bool:
         pass
+
+    def remove_object(self, bucket_name: str, object_name: str):
+        try:
+            response = self.client.remove_object(
+                bucket_name,
+                object_name,)
+            logging.info(f"Removed '{object_name}' from bucket "
+                         f"'{bucket_name}' in S3 '{self.base_url.host}'")
+            return response
+        except S3Error as e:
+            logging.error(e)
 
 
 minio_s3: MinioS3 | None = None

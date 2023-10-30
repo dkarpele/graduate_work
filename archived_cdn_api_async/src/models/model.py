@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import orjson
 
 # Используем pydantic для упрощения работы при перегонке данных из json в
@@ -37,3 +39,14 @@ class PaginateModel:
                  ):
         self.page_number = page_number
         self.page_size = page_size
+
+@dataclass
+class Node:
+    endpoint: str
+    alias: str
+    access_key_id: str
+    secret_access_key: str
+    city: str
+    latitude: float
+    longitude: float
+    is_active: str

@@ -10,23 +10,26 @@ from core.config import settings
 from db.aws_s3 import S3MultipartUpload
 from db.minio_s3 import MinioS3
 from db.scheduler import get_scheduler, jobs
-from helpers.exceptions import object_not_exist
+from helpers.exceptions import object_not_exist, object_already_uploaded
 from helpers.helper_sync import (get_active_nodes, find_closest_node,
-                                 object_exists, origin_is_alive,
-                                 multipart_upload,
-                                 copy_object_to_node)
+                                 object_exists, origin_is_alive, get_mpu_id)
+from services.service import multipart_upload
+from services.scheduler import copy_object_to_node
 from services.mongo import MongoDep
+
+from asyncio import StreamReader
+s = StreamReader().read()
 
 router = APIRouter()
 
 
-@router.get('/{film_title}',
+@router.get('/{object_name}',
             summary="Get URL to preview film",
             response_description="Redirects to url to preview film",
             )
-def film_url(
+def object_url(
         request: Request,
-        film_title: str,
+        object_name: str,
         mongo: MongoDep
 ) -> RedirectResponse:
     client_host = request.client.host
@@ -41,7 +44,7 @@ def film_url(
     # Check if object exists in the closest edge location
     object_ = object_exists(MinioS3,
                             settings.bucket_name,
-                            film_title,
+                            object_name,
                             closest_node)
 
     endpoint = closest_node.endpoint
@@ -60,7 +63,7 @@ def film_url(
         job = get_scheduler()
         jobs(job,
              copy_object_to_node,
-             args=(MinioS3, film_title, origin_node, closest_node, mongo),
+             args=(MinioS3, object_name, origin_node, closest_node, mongo),
              next_run_time=datetime.now())
         try:
             job.start()
@@ -70,7 +73,7 @@ def film_url(
     # object doesn't exist on origin location
     elif not object_ and closest_node.alias == 'origin':
         # Nothing to be copied. Raise exception
-        raise object_not_exist(film_title, settings.bucket_name)
+        raise object_not_exist(object_name, settings.bucket_name)
 
     client = MinioS3(endpoint=endpoint,
                      access_key=access_key,
@@ -78,7 +81,7 @@ def film_url(
                      secure=False)
 
     url = client.get_url(bucket_name=settings.bucket_name,
-                         object_name=film_title)
+                         object_name=object_name)
     logging.info(f"URL created using endpoint '{endpoint}'")
     return RedirectResponse(url=url)
 
@@ -93,6 +96,12 @@ def upload_object(
 ) -> Union[str | HTTPException]:
     active_nodes = get_active_nodes()
     origin_node = origin_is_alive(active_nodes)
+    filename = file_upload.filename
+
+    object_already_uploaded(mongo,
+                            origin_node,
+                            filename,
+                            collection="api")
 
     endpoint = 'http://' + origin_node.endpoint
     origin_client_dict = {
@@ -103,32 +112,46 @@ def upload_object(
 
     origin_client: S3MultipartUpload = S3MultipartUpload(
         settings.bucket_name,
-        file_upload.filename,
+        filename,
         content_type=file_upload.content_type,
         total_bytes=file_upload.size,
         **origin_client_dict)
 
-    # If upload was failed - try to re-upload it with current mpu_id
-    mpu_id_query = {'object_name': file_upload.filename,
-                    'node': endpoint,
-                    'status': 'in_progress'}
-    projection = {'mpu_id': 1}
-    res = mongo.get_data(query=mpu_id_query,
-                         collection='api',
-                         projection=projection
-                         )
-
-    mpu_id = res[0]['mpu_id'] if res else None
+    mpu_id = get_mpu_id(endpoint, filename, mongo)
 
     if multipart_upload(mongo,
                         origin_client,
                         object_=file_upload.file,
-                        is_api=True,
                         mpu_id=mpu_id):
-        return "Upload completed successfully."
+        return f"Upload {filename} completed successfully."
     else:
         return HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Upload failed. Please retry",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+@router.delete('/delete_object',
+               response_model=None,
+               summary="Delete object from all nodes",
+               )
+def delete_object(
+        object_name: str,
+        mongo: MongoDep
+) -> Union[str | HTTPException]:
+    active_nodes = get_active_nodes()
+
+    endpoints = []
+    for node in active_nodes.values():
+        client = MinioS3(endpoint=node.endpoint,
+                         access_key=node.access_key_id,
+                         secret_key=node.secret_access_key,
+                         secure=False)
+        client.remove_object(settings.bucket_name,
+                             object_name)
+        endpoints.append(node.endpoint)
+    document = {"object_name": object_name}
+    mongo.delete_data(document, "api")
+    mongo.delete_data(document, "cdn")
+    return f"{object_name} was removed from nodes {endpoints}"

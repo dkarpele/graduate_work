@@ -50,6 +50,7 @@ class MinioS3(AbstractS3):
                     offset=offset,
                     length=length)
                 # r = await response.read()
+                r = await response.content.readexactly(response.content_length)
                 logging.info(f"Found '{object_name}' in bucket "
                              f"'{bucket_name}' in S3 '{response.host}'")
                 return response

@@ -12,7 +12,7 @@ from core.config import settings
 from db.minio_s3 import MinioS3
 from db.aws_s3 import AWSS3, S3MultipartUpload
 from db.scheduler import get_scheduler, jobs
-from helpers.exceptions import object_not_exist
+# from helpers.exceptions import object_not_exist
 from helpers.helper import (get_active_nodes, find_closest_node,
                             object_exists, origin_is_alive,
                             copy_object_to_node, multipart_upload)

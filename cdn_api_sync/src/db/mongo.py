@@ -3,11 +3,12 @@ from pymongo import MongoClient, errors
 from pymongo.results import DeleteResult
 
 from core.config import mongo_settings
+from db import AbstractStorage
 from helpers.exceptions import entity_doesnt_exist
 from models.model import Model
 
 
-class Mongo:
+class Mongo(AbstractStorage):
     MAX_PAGE_SIZE = 10
 
     def __init__(self, client: str):
@@ -116,7 +117,7 @@ class Mongo:
         db_name = mongo_settings.db
         db = self.client[db_name]
         try:
-            res = db[collection].delete_one(jsonable_encoder(document), )
+            res = db[collection].delete_many(jsonable_encoder(document), )
         except errors.PyMongoError as err:
             raise entity_doesnt_exist(err)
         return res

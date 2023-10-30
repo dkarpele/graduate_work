@@ -2,6 +2,9 @@ import logging
 
 from fastapi import HTTPException, status
 
+from db import AbstractStorage
+from models.model import Node
+
 credentials_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
     detail="Could not validate credentials",
@@ -33,6 +36,29 @@ def entity_doesnt_exist(err: Exception) -> HTTPException:
         detail=f"{err}",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+def object_already_uploaded(storage: AbstractStorage,
+                            node: Node,
+                            object_: str,
+                            collection: str) -> None:
+    endpoint = 'http://' + node.endpoint
+    query = {'object_name': object_,
+             'node': endpoint,
+             'status': 'finished'}
+    projection = {'object_name': 1}
+    res = storage.get_data(query=query,
+                           collection=collection,
+                           projection=projection
+                           )
+    if res:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{object_} was already successfully uploaded to"
+                   f" {endpoint}. If you want to upload an object with the "
+                   f"same name, you need to remove the old one first.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 too_many_requests = HTTPException(

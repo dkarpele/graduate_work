@@ -1,13 +1,16 @@
 import logging
 import os
+from typing import Any
 
 import boto3
+from fastapi import HTTPException, status
 from minio import S3Error
 from minio.datatypes import Object
 from urllib3 import HTTPResponse
 
 from core.config import settings
 from db import AbstractS3
+from db import AbstractStorage
 
 
 class AWSS3(AbstractS3):
@@ -36,9 +39,7 @@ class AWSS3(AbstractS3):
                          f"'{bucket_name}' in S3 '{response}'")
             return response
         except S3Error as e:
-            logging.warning(f"{object_name} doesn't exist in bucket "
-                            f"{bucket_name}")
-            logging.warning(e)
+            logging.info(e)
             return False
 
     def stat_object(self,
@@ -68,6 +69,9 @@ class AWSS3(AbstractS3):
         except FileNotFoundError as e:
             logging.error("Can't download file")
             logging.error(e)
+
+    def remove_object(self, bucket_name: str, object_name: str):
+        pass
 
 
 class S3MultipartUpload(AWSS3):
@@ -170,27 +174,79 @@ class S3MultipartUpload(AWSS3):
                 i += 1
         return parts
 
-    def upload_bytes(self, mpu_id, data, part_number=1, parts=None):
-        if len(parts) >= part_number:
-            # Already uploaded, go to the next one
-            part = parts[part_number - 1]
-            if len(data) != part["Size"]:
-                raise Exception("Size mismatch: local " + str(
-                    len(data)) + ", remote: " + str(part["Size"]))
-            parts[part_number - 1] = {k: part[k] for k in
-                                      ('PartNumber', 'ETag')}
-        else:
-            part = self.client.upload_part(
-                # We could include `ContentMD5='hash'` to discover
-                # if data has been corrupted upon transfer
-                Body=data,
-                Bucket=self.bucket,
-                Key=self.key,
-                UploadId=mpu_id,
-                PartNumber=part_number,
-            )
+    def upload_bytes(self,
+                     mpu_id: str,
+                     storage: AbstractStorage,
+                     parts: list | None = None,
+                     origin_client: AbstractS3 | None = None,
+                     object_: Any = None,
+                     collection: str = "api"):
+        object_name = self.key
+        query = {"object_name": object_name,
+                 "node": self.client.meta.endpoint_url}
 
-            parts.append({"PartNumber": part_number, "ETag": part["ETag"]})
+        if parts is None:
+            parts = []
+
+        uploaded_bytes = 0
+        part_number = 1
+        while True:
+            if collection == "cdn":
+                got_obj = origin_client.get_object(
+                    settings.bucket_name,
+                    object_name,
+                    uploaded_bytes,
+                    settings.upload_part_size)
+                data = got_obj.data if got_obj else b''
+            elif collection == "api":
+                data = object_.read(settings.upload_part_size)
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Bad collection '{str(collection)}'!",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            if not len(data):
+                break
+
+            if len(parts) >= part_number:
+                # Already uploaded, go to the next one
+                part = parts[part_number - 1]
+                if len(data) != part["Size"]:
+                    raise Exception("Size mismatch: local " + str(
+                        len(data)) + ", remote: " + str(part["Size"]))
+                parts[part_number - 1] = {k: part[k]
+                                          for k in ('PartNumber', 'ETag')}
+            else:
+                part = self.client.upload_part(
+                    # We could include `ContentMD5='hash'` to discover if
+                    # data has been corrupted upon transfer
+                    Body=data,
+                    Bucket=self.bucket,
+                    Key=self.key,
+                    UploadId=mpu_id,
+                    PartNumber=part_number,
+                )
+
+                # Uploading intermediate data to MongoDB
+                update = {"object_name": object_name,
+                          "node": self.client.meta.endpoint_url,
+                          "mpu_id": mpu_id,
+                          "part_number": part_number,
+                          "Etag": part["ETag"],
+                          "status": "in_progress"}
+                storage.update_data(query=query,
+                                    update=update,
+                                    collection=collection)
+
+                parts.append({"PartNumber": part_number, "ETag": part["ETag"]})
+            uploaded_bytes += len(data)
+            logging.info(
+                f"""{uploaded_bytes} of {self.total_bytes} bytes \
+            uploaded {self.as_percent(uploaded_bytes,
+                                      self.total_bytes)}%
+            """)
+            part_number += 1
 
         return parts
 

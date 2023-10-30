@@ -132,7 +132,10 @@ async def object_exists(client: Type[AbstractS3],
     if not bucket_found:
         return False
 
-    object_found: Any = await client.get_object(bucket_name, object_name)
+    object_found: Any = await client.get_object(bucket_name,
+                                                object_name,
+                                                offset=0,
+                                                length=6000000)
     if not object_found:
         return False
 

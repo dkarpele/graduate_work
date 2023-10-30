@@ -11,10 +11,12 @@ import requests
 from aiohttp import ClientConnectorError
 from dotenv import load_dotenv
 from geopy.distance import distance
+from pymongo import MongoClient
 
 from core.config import settings
 from db import AbstractS3
 from db.aws_s3 import S3MultipartUpload
+from db.mongo import Mongo
 from helpers.exceptions import locations_not_available
 
 load_dotenv()
@@ -82,12 +84,13 @@ def find_closest_node(user_ip: str,
         res = response.json()
         try:
             user_coordinates = (float(res['latitude']),
-                                float(res['longitude']))
+                                float(res['longitude'])
+                                )
         except KeyError:
             logging.error(f"'{user_ip}' not found in the database.")
             return False
     except ClientConnectorError as err:
-        logging.error(f"{err}")
+        logging.error(err)
         return False
 
     # Just taking first node from the collection
@@ -192,7 +195,8 @@ def copy_object_file_to_node(client: Type[AbstractS3],
 def copy_object_to_node(client: Type[AbstractS3],
                         object_name: str,
                         origin_node: Node,
-                        edge_node: Node) -> None:
+                        edge_node: Node,
+                        storage: Mongo) -> None:
     origin_client: AbstractS3 = client(
         endpoint=origin_node.endpoint,
         access_key=origin_node.access_key_id,
@@ -215,51 +219,90 @@ def copy_object_to_node(client: Type[AbstractS3],
                                     content_type=obj.content_type,
                                     **edge_client_dict)
 
-    multipart_upload(upload_client=edge_client,
+    multipart_upload(storage=storage,
+                     upload_client=edge_client,
                      origin_client=origin_client,
                      is_api=False)
 
 
-def multipart_upload(upload_client: S3MultipartUpload,
-                     object_: Any = None,
+def multipart_upload(storage: Mongo,
+                     upload_client: S3MultipartUpload,
                      origin_client: AbstractS3 | None = None,
-                     is_api: bool = True):
-    upload_client.abort_all()
-    # create new multipart upload
-    mpu_id = upload_client.create()
-    logging.info(f"Starting upload with id={mpu_id}")
+                     object_: Any = None,
+                     is_api: bool = True,
+                     mpu_id: str = None):
+    # upload_client.abort_all()
+
+    if mpu_id:
+        parts: list = upload_client.get_uploaded_parts(mpu_id)
+    else:
+        parts = []
+        # create new multipart upload
+        mpu_id = upload_client.create()
+        logging.info(f"Starting upload with id={mpu_id}")
+
+    object_name = upload_client.key
+    query = {"object_name": object_name,
+             "node": upload_client.client.meta.endpoint_url}
 
     # upload parts
-    parts = []
+
     part_number = 1
     uploaded_bytes = 0
     while True:
         if not is_api:
+            collection = "cdn"
             got_obj = origin_client.get_object(
                 settings.bucket_name,
-                upload_client.key,
+                object_name,
                 uploaded_bytes,
                 settings.upload_part_size)
             data = got_obj.data if got_obj else b''
         else:
+            collection = "api"
             data = object_.read(settings.upload_part_size)
         if not len(data):
             break
-        parts.extend(upload_client.upload_bytes(mpu_id,
-                                                data,
-                                                part_number))
+
+        s3_upload = upload_client.upload_bytes(mpu_id,
+                                               data,
+                                               part_number,
+                                               parts)
+        parts.extend(s3_upload)
+
+        # Uploading intermediate data to MongoDB
+        update = {"object_name": object_name,
+                  "node": upload_client.client.meta.endpoint_url,
+                  "mpu_id": mpu_id,
+                  "part_number": s3_upload[-1]['PartNumber'],
+                  "Etag": s3_upload[-1]['ETag'],
+                  "status": "in_progress"}
+        storage.update_data(query=query,
+                            update=update,
+                            collection=collection)
+
         uploaded_bytes += len(data)
         logging.info(
             f"""{uploaded_bytes} of {upload_client.total_bytes} bytes \
 uploaded {upload_client.as_percent(uploaded_bytes,
-                                   upload_client.total_bytes)}%""")
+                                   upload_client.total_bytes)}%
+""")
         part_number += 1
+
+    # Complete object upload
     res = upload_client.complete(mpu_id, parts)
+
+    # Uploading finished status to MongoDB
+    update = {"object_name": object_name,
+              "status": "finished"}
+    storage.update_data(query=query,
+                        update=update,
+                        collection=collection)
     logging.info(f"Upload completed with metadata: "
                  f"{res}")
     return res
 
 
 if __name__ == "__main__":
-    nodes = get_active_nodes("../.env.minio.json")
-    print(find_closest_node('137.0.0.1', nodes))
+    print(find_closest_node('137.0.0.1',
+                            get_active_nodes("../.env.minio.json")))

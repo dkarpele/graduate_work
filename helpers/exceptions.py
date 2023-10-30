@@ -27,10 +27,10 @@ wrong_username_or_password = HTTPException(
 )
 
 
-def entity_doesnt_exist(name: str, value: str) -> HTTPException:
+def entity_doesnt_exist(err: Exception) -> HTTPException:
     return HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=f"{name} {value} doesn't exist",
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"{err}",
         headers={"WWW-Authenticate": "Bearer"},
     )
 

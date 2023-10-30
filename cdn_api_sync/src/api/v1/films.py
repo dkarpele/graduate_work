@@ -7,14 +7,15 @@ from fastapi import APIRouter, Request, UploadFile, HTTPException, status
 from fastapi.responses import RedirectResponse
 
 from core.config import settings
-from db.aws_s3 import AWSS3, S3MultipartUpload
+from db.aws_s3 import S3MultipartUpload
 from db.minio_s3 import MinioS3
 from db.scheduler import get_scheduler, jobs
 from helpers.exceptions import object_not_exist
 from helpers.helper_sync import (get_active_nodes, find_closest_node,
                                  object_exists, origin_is_alive,
-                                 copy_object_file_to_node, multipart_upload,
+                                 multipart_upload,
                                  copy_object_to_node)
+from services.mongo import MongoDep
 
 router = APIRouter()
 
@@ -25,7 +26,8 @@ router = APIRouter()
             )
 def film_url(
         request: Request,
-        film_title: str
+        film_title: str,
+        mongo: MongoDep
 ) -> RedirectResponse:
     client_host = request.client.host
     client_host = "137.0.0.1"
@@ -58,7 +60,7 @@ def film_url(
         job = get_scheduler()
         jobs(job,
              copy_object_to_node,
-             args=(MinioS3, film_title, origin_node, closest_node),
+             args=(MinioS3, film_title, origin_node, closest_node, mongo),
              next_run_time=datetime.now())
         try:
             job.start()
@@ -86,13 +88,15 @@ def film_url(
              summary="Upload object to storage",
              )
 def upload_object(
-        file_upload: UploadFile
+        file_upload: UploadFile,
+        mongo: MongoDep
 ) -> Union[str | HTTPException]:
     active_nodes = get_active_nodes()
     origin_node = origin_is_alive(active_nodes)
 
+    endpoint = 'http://' + origin_node.endpoint
     origin_client_dict = {
-        'endpoint_url': 'http://' + origin_node.endpoint,
+        'endpoint_url': endpoint,
         'aws_access_key_id': origin_node.access_key_id,
         'aws_secret_access_key': origin_node.secret_access_key,
         'verify': False}
@@ -104,7 +108,23 @@ def upload_object(
         total_bytes=file_upload.size,
         **origin_client_dict)
 
-    if multipart_upload(origin_client, file_upload.file, is_api=True):
+    # If upload was failed - try to re-upload it with current mpu_id
+    mpu_id_query = {'object_name': file_upload.filename,
+                    'node': endpoint,
+                    'status': 'in_progress'}
+    projection = {'mpu_id': 1}
+    res = mongo.get_data(query=mpu_id_query,
+                         collection='api',
+                         projection=projection
+                         )
+
+    mpu_id = res[0]['mpu_id'] if res else None
+
+    if multipart_upload(mongo,
+                        origin_client,
+                        object_=file_upload.file,
+                        is_api=True,
+                        mpu_id=mpu_id):
         return "Upload completed successfully."
     else:
         return HTTPException(

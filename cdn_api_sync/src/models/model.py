@@ -20,20 +20,3 @@ class Model(BaseModel):
         json_loads = orjson.loads
         json_dumps = orjson_dumps
         allow_population_by_field_name = True
-
-
-class PaginateModel:
-    def __init__(self,
-                 page_number: int = Query(1,
-                                          description=conf.PAGE_DESC,
-                                          alias=conf.PAGE_ALIAS,
-                                          ge=1,
-                                          le=10000),
-                 page_size: int = Query(50,
-                                        description=conf.SIZE_DESC,
-                                        alias=conf.SIZE_ALIAS,
-                                        ge=1,
-                                        le=500),
-                 ):
-        self.page_number = page_number
-        self.page_size = page_size

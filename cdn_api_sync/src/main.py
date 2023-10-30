@@ -6,9 +6,9 @@ from fastapi import FastAPI
 from fastapi.responses import ORJSONResponse
 
 from api.v1 import films
-from core.config import settings
+from core.config import settings, mongo_settings
 from core.logger import LOGGING
-from db import elastic, redis, minio_s3
+from db import elastic, redis, minio_s3, mongo
 from db.scheduler import jobs, get_scheduler
 
 
@@ -20,21 +20,23 @@ async def startup():
     job.start()
     logging.info(f'List of scheduled jobs: {job.get_jobs()}')
 
-    # minio_s3.minio_s3 = minio_s3.MinioS3(endpoint="127.0.0.1:9000",
-    #                                      access_key="minioadmin",
-    #                                      secret_key="minioadmin",
-    #                                      secure=False)
-    # redis.redis = redis.Redis(host=settings.redis_host,
-    #                           port=settings.redis_port,
-    #                           ssl=False)
+    if mongo_settings.user and mongo_settings.password:
+        mongo.mongo = mongo.Mongo(
+            f'mongodb://'
+            f'{mongo_settings.user}:{mongo_settings.password}@'
+            f'{mongo_settings.host}:{mongo_settings.port}'
+        )
+    else:
+        mongo.mongo = mongo.Mongo(
+            f'mongodb://'
+            f'{mongo_settings.host}:{mongo_settings.port}'
+        )
 
 
 async def shutdown():
     pass
     job = get_scheduler()
     job.shutdown()
-    # await redis.redis.close()
-    # await elastic.es.close()
 
 
 @asynccontextmanager

@@ -109,7 +109,7 @@ class S3MultipartUpload(AWSS3):
                         UploadId=upload_id))
         return aborted
 
-    def get_uploaded_parts(self, upload_id):
+    def get_uploaded_parts(self, upload_id: str) -> list:
         parts = []
         res = self.client.list_parts(Bucket=self.bucket, Key=self.key,
                                      UploadId=upload_id)
@@ -171,8 +171,6 @@ class S3MultipartUpload(AWSS3):
         return parts
 
     def upload_bytes(self, mpu_id, data, part_number=1, parts=None):
-        if parts is None:
-            parts = []
         if len(parts) >= part_number:
             # Already uploaded, go to the next one
             part = parts[part_number - 1]

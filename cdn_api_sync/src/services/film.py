@@ -20,6 +20,7 @@ def get_aws_cdn_service(
         aws_s3: AWSS3 = Depends(get_aws_s3)) -> CDNService:
     return CDNService(aws_s3)
 
+
 @lru_cache()
 def get_film_service(
         redis: Redis = Depends(get_redis),

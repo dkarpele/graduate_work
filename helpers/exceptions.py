@@ -30,7 +30,7 @@ wrong_username_or_password = HTTPException(
 )
 
 
-def entity_doesnt_exist(err: Exception) -> HTTPException:
+async def entity_doesnt_exist(err: Exception) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=f"{err}",
@@ -38,19 +38,19 @@ def entity_doesnt_exist(err: Exception) -> HTTPException:
     )
 
 
-def object_already_uploaded(storage: AbstractStorage,
-                            node: Node,
-                            object_: str,
-                            collection: str) -> None:
+async def object_already_uploaded(storage: AbstractStorage,
+                                  node: Node,
+                                  object_: str,
+                                  collection: str) -> None:
     endpoint = 'http://' + node.endpoint
     query = {'object_name': object_,
              'node': endpoint,
              'status': 'finished'}
     projection = {'object_name': 1}
-    res = storage.get_data(query=query,
-                           collection=collection,
-                           projection=projection
-                           )
+    res = await storage.get_data(query=query,
+                                 collection=collection,
+                                 projection=projection
+                                 )
     if res:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -74,7 +74,8 @@ locations_not_available = HTTPException(
 )
 
 
-def object_not_exist(object_name: str, bucket_name: str) -> HTTPException:
+async def object_not_exist(object_name: str,
+                           bucket_name: str) -> HTTPException:
     message = f"'{object_name}' doesn't exist in '{bucket_name}' bucket"
     logging.error(message)
     return HTTPException(

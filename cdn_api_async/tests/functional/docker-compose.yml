@@ -1,0 +1,65 @@
+version: '3'
+
+services:
+  fastapi:
+    build: ../../src/.
+    image: fastapi-image
+    container_name: fastapi
+    privileged: true
+    env_file:
+      - .env
+    networks:
+      - backend
+    expose:
+      - "8000"
+    depends_on:
+      - es
+      - redis
+    volumes:
+      - ./../../tests:/${APP_HOME}/tests
+
+  tests:
+    image: fastapi-image
+    container_name: tests
+    privileged: true
+    env_file:
+      - .env
+    networks:
+      - backend
+    depends_on:
+      - es
+      - redis
+      - fastapi
+    entrypoint: ${APP_HOME}/entrypoint.sh
+    volumes:
+      - ./../../tests:/${APP_HOME}/tests
+
+  es:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.6.2
+    container_name: es
+    environment:
+      - "discovery.type=single-node"
+      - "xpack.security.enabled=false"
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    networks:
+      - backend
+    volumes:
+      - es-db:/data/es
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    privileged: true
+    networks:
+      - backend
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 50
+
+networks:
+  backend:
+
+volumes:
+  es-db:

@@ -39,3 +39,15 @@ class MongoCreds(MainConf):
 
 
 mongo_settings = MongoCreds()
+
+
+class CronSettings:
+    finish_in_progress_tasks: dict = {
+        'hour': 21,
+        'minute': 51,
+        'second': 30,
+        'timezone': 'UTC'
+    }
+
+
+cron_settings = CronSettings()

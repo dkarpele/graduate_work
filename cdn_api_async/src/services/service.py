@@ -1,5 +1,7 @@
 import logging
-from typing import Any
+from datetime import datetime
+
+from fastapi import UploadFile
 
 from db import AbstractStorage, AbstractS3
 from db.aws_s3 import S3MultipartUpload
@@ -16,11 +18,13 @@ class CDNService:
 
 async def multipart_upload(storage: AbstractStorage,
                            upload_client: S3MultipartUpload,
+                           status: str,
                            origin_client: AbstractS3 | None = None,
                            origin_client_s3=None,
-                           object_: Any = None,
+                           object_: UploadFile = None,
                            collection: str = "api",
-                           mpu_id: str = None):
+                           mpu_id: str = None,
+                           ):
     async with upload_client.client as s3:
         if mpu_id:
             logging.info(f"Continuing upload with id={mpu_id}")
@@ -31,11 +35,13 @@ async def multipart_upload(storage: AbstractStorage,
                 s3=s3,
                 mpu_id=mpu_id,
                 storage=storage,
+                status_=status,
                 parts=finished_parts,
                 origin_client=origin_client,
                 origin_client_s3=origin_client_s3,
                 object_=object_,
-                collection=collection)
+                collection=collection,
+                )
         else:
             # abort all multipart uploads for this bucket (optional,
             # for starting over)
@@ -49,11 +55,12 @@ async def multipart_upload(storage: AbstractStorage,
                 s3=s3,
                 mpu_id=mpu_id,
                 storage=storage,
+                status_=status,
                 origin_client=origin_client,
                 origin_client_s3=origin_client_s3,
                 object_=object_,
-                collection=collection
-            )
+                collection=collection,
+                )
 
         # Complete object upload
         res = await upload_client.complete(s3, mpu_id, parts)
@@ -63,6 +70,8 @@ async def multipart_upload(storage: AbstractStorage,
     query = {"object_name": object_name,
              "node": upload_client.endpoint}
     update = {"object_name": object_name,
+              "uploaded": upload_client.total_bytes,
+              "last_modified": datetime.utcnow(),
               "status": "finished"}
     await storage.update_data(query=query,
                               update=update,

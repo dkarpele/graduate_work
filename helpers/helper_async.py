@@ -126,7 +126,9 @@ async def object_exists(client: Type[AbstractS3],
     return object_found
 
 
-async def get_mpu_id(endpoint: str, filename: str, storage: AbstractStorage,
+async def get_mpu_id(endpoint: str,
+                     filename: str,
+                     storage: AbstractStorage,
                      collection: str = "api"):
     # If upload was failed - try to re-upload it with current mpu_id
     mpu_id_query = {'object_name': filename,
@@ -138,6 +140,34 @@ async def get_mpu_id(endpoint: str, filename: str, storage: AbstractStorage,
                                  projection=projection
                                  )
     return res[0]['mpu_id'] if res else None
+
+
+async def is_scheduler_in_progress(storage: AbstractStorage,
+                                   node: Node,
+                                   object_: str,
+                                   collection: str) -> list:
+    endpoint = 'http://' + node.endpoint
+    query = {'object_name': object_,
+             'node': endpoint,
+             'status': 'scheduler_in_progress'}
+    projection = {'object_name': 1}
+    res = await storage.get_data(query=query,
+                                 collection=collection,
+                                 projection=projection
+                                 )
+    return res
+
+
+async def get_in_progress_objects(storage: AbstractStorage,
+                                  collection: str) -> list:
+    query = {'status': 'in_progress'}
+    projection = {'object_name': 1,
+                  'node': 1,}
+    res = await storage.get_data(query=query,
+                                 collection=collection,
+                                 projection=projection
+                                 )
+    return res
 
 
 async def main():

@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import datetime
 from typing import Any
 
 from aioboto3 import Session
@@ -193,11 +194,13 @@ class S3MultipartUpload(AWSS3):
                            s3,
                            mpu_id: str,
                            storage: AbstractStorage,
+                           status_: str,
                            parts: list | None = None,
                            origin_client: AbstractS3 | None = None,
                            origin_client_s3=None,
                            object_: Any = None,
-                           collection: str = "api"):
+                           collection: str = "api",
+                           ):
 
         object_name = self.key
         endpoint = self.endpoint
@@ -261,7 +264,10 @@ class S3MultipartUpload(AWSS3):
                           "mpu_id": mpu_id,
                           "part_number": part_number,
                           "Etag": part["ETag"],
-                          "status": "in_progress"}
+                          "uploaded": uploaded_bytes,
+                          "size": self.total_bytes,
+                          "last_modified": datetime.utcnow(),
+                          "status": status_}
                 await storage.update_data(query=query,
                                           update=update,
                                           collection=collection)

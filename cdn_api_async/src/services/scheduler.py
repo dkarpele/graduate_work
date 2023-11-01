@@ -10,7 +10,8 @@ from core.config import settings
 from db import AbstractS3, AbstractStorage
 from db.aws_s3 import S3MultipartUpload
 from helpers.exceptions import object_already_uploaded
-from helpers.helper_async import get_mpu_id
+from helpers.helper_async import get_mpu_id, is_scheduler_in_progress, \
+    get_in_progress_objects, origin_is_alive, get_active_nodes
 from services.service import multipart_upload
 from models.model import Node
 
@@ -67,11 +68,11 @@ async def copy_object_to_node(client: Type[AbstractS3],
                               object_name: str,
                               origin_node: Node,
                               edge_node: Node,
-                              storage: AbstractStorage) -> None:
-    await object_already_uploaded(storage,
-                                  edge_node,
-                                  object_name,
-                                  collection="cdn")
+                              storage: AbstractStorage,
+                              status: str) -> None:
+    # Check that object wasn't uploaded yet and not blocked by scheduler
+    storage_data = (storage, edge_node, object_name, "cdn")
+    await object_already_uploaded(*storage_data)
 
     origin_client: AbstractS3 = client(
         endpoint='http://' + origin_node.endpoint,
@@ -91,7 +92,7 @@ async def copy_object_to_node(client: Type[AbstractS3],
             'aws_secret_access_key': edge_node.secret_access_key,
             'verify': False}
         total_bytes = int(
-            obj['ContentRange'][obj['ContentRange'].rindex('/')+1:])
+            obj['ContentRange'][obj['ContentRange'].rindex('/') + 1:])
         edge_client = S3MultipartUpload(settings.bucket_name,
                                         object_name,
                                         total_bytes=total_bytes,
@@ -111,5 +112,33 @@ async def copy_object_to_node(client: Type[AbstractS3],
                                upload_client=edge_client,
                                origin_client=origin_client,
                                origin_client_s3=s3,
+                               status=status,
                                collection="cdn",
-                               mpu_id=mpu_id)
+                               mpu_id=mpu_id,
+                               )
+
+
+async def finish_in_progress_tasks(client: Type[AbstractS3],
+                                   storage: AbstractStorage, ) -> None:
+    active_nodes = await get_active_nodes()
+    origin_node = await origin_is_alive(active_nodes)
+    objects_: list = await get_in_progress_objects(storage,
+                                                   "cdn")
+    if not objects_:
+        logging.info("No in progress objects. Everything good.")
+        return
+
+    for i in objects_:
+        edge_node = [j
+                     for j in active_nodes.values()
+                     if j.endpoint in i['node']
+                     ]
+        if edge_node:
+            await copy_object_to_node(client,
+                                  i['object_name'],
+                                  origin_node,
+                                  edge_node[0],
+                                  storage,
+                                  "scheduler_in_progress")
+        else:
+            logging.info("No in progress objects. Everything good.")

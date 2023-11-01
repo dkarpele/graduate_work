@@ -6,20 +6,15 @@ from fastapi import FastAPI
 from fastapi.responses import ORJSONResponse
 
 from api.v1 import films
-from core.config import settings, mongo_settings
+from core.config import settings, mongo_settings, cron_settings
 from core.logger import LOGGING
 from db import mongo
+from db.aws_s3 import AWSS3
 from db.scheduler import jobs, get_scheduler
+from services.scheduler import finish_in_progress_tasks
 
 
 async def startup():
-    pass
-    # Connecting to scheduler
-    job = await get_scheduler()
-    await jobs(job)
-    job.start()
-    logging.info(f'List of scheduled jobs: {job.get_jobs()}')
-
     if mongo_settings.user and mongo_settings.password:
         mongo.mongo = mongo.Mongo(
             f'mongodb://'
@@ -32,6 +27,18 @@ async def startup():
             f'{mongo_settings.host}:{mongo_settings.port}'
         )
 
+    # Connecting to scheduler
+    job = await get_scheduler()
+    await jobs(job,
+               finish_in_progress_tasks,
+               args=(AWSS3, mongo.mongo),
+               trigger='cron',
+               minute=cron_settings.finish_in_progress_tasks['minute'],
+               second=cron_settings.finish_in_progress_tasks['second'],
+               timezone=cron_settings.finish_in_progress_tasks['timezone']
+               )
+    job.start()
+    logging.info(f'List of scheduled jobs: {job.get_jobs()}')
 
 async def shutdown():
     job = await get_scheduler()

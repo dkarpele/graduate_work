@@ -1,19 +1,20 @@
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Type
 
 import magic
 from aiofiles import os
 from aioshutil import rmtree
+
 from core.config import settings
 from db import AbstractS3, AbstractStorage
 from db.aws_s3 import S3MultipartUpload
 from helpers.exceptions import object_already_uploaded
-from helpers.helper_async import get_mpu_id, is_scheduler_in_progress, \
-    get_in_progress_objects, origin_is_alive, get_active_nodes
-from services.service import multipart_upload
+from helpers.helper_async import get_mpu_id, get_in_progress_objects, \
+    origin_is_alive, get_active_nodes
 from models.model import Node
+from services.service import multipart_upload
 
 
 async def copy_object_file_to_node(client: Type[AbstractS3],
@@ -120,25 +121,82 @@ async def copy_object_to_node(client: Type[AbstractS3],
 
 async def finish_in_progress_tasks(client: Type[AbstractS3],
                                    storage: AbstractStorage, ) -> None:
+    time_ = datetime.utcnow() - timedelta(hours=6)
+    threshold = {
+        '$gt': time_
+    }
     active_nodes = await get_active_nodes()
     origin_node = await origin_is_alive(active_nodes)
+
     objects_: list = await get_in_progress_objects(storage,
-                                                   "cdn")
+                                                   "cdn",
+                                                   threshold)
     if not objects_:
-        logging.info("No in progress objects. Everything good.")
+        logging.info(f"No in progress objects from {time_}. Everything good.")
         return
 
     for i in objects_:
+        # Trying to find Node object
         edge_node = [j
                      for j in active_nodes.values()
                      if j.endpoint in i['node']
                      ]
         if edge_node:
             await copy_object_to_node(client,
-                                  i['object_name'],
-                                  origin_node,
-                                  edge_node[0],
-                                  storage,
-                                  "scheduler_in_progress")
+                                      i['object_name'],
+                                      origin_node,
+                                      edge_node[0],
+                                      storage,
+                                      "scheduler_in_progress")
         else:
-            logging.info("No in progress objects. Everything good.")
+            logging.info(f"No in progress objects from {time_}. "
+                         f"Everything good.")
+
+
+async def abort_old_tasks(client: Type[S3MultipartUpload],
+                          storage: AbstractStorage, ):
+    time_ = datetime.utcnow() - timedelta(hours=6)
+    threshold = {
+        '$lt': time_
+    }
+    active_nodes = await get_active_nodes()
+
+    objects_cdn: list = await get_in_progress_objects(storage,
+                                                      "cdn",
+                                                      threshold)
+    objects_api: list = await get_in_progress_objects(storage,
+                                                      "api",
+                                                      threshold)
+    objects_ = objects_api + objects_cdn
+    if not objects_:
+        logging.info(f"No in progress objects older than {time_}. "
+                     f"Everything good.")
+        return
+
+    for i in objects_:
+        # Trying to find Node object
+        edge_node = [j
+                     for j in active_nodes.values()
+                     if j.endpoint in i['node']
+                     ]
+        if edge_node:
+            en = edge_node[0]
+            endpoint = 'http://' + en.endpoint
+            edge_client_dict = {
+                'endpoint': endpoint,
+                'aws_access_key_id': en.access_key_id,
+                'aws_secret_access_key': en.secret_access_key,
+                'verify': False}
+            edge_client = client(settings.bucket_name,
+                                 i['object_name'],
+                                 **edge_client_dict)
+            async with edge_client.client as s3:
+                await edge_client.abort_all(s3)
+
+            # clear storage
+            document = {"object_name": i['object_name']}
+            await storage.delete_data(document, "api")
+            await storage.delete_data(document, "cdn")
+        else:
+            logging.info(f"No in progress objects older than {time_}. "
+                         f"Everything good.")

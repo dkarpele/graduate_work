@@ -238,6 +238,7 @@ class S3MultipartUpload(AWSS3):
                 )
             if not len(data):
                 break
+            uploaded_bytes += len(data)
 
             if len(parts) >= part_number:
                 # Already uploaded, go to the next one
@@ -257,28 +258,30 @@ class S3MultipartUpload(AWSS3):
                     UploadId=mpu_id,
                     PartNumber=part_number,
                 )
-
-                # Uploading intermediate data to MongoDB
-                update = {"object_name": object_name,
-                          "node": endpoint,
-                          "mpu_id": mpu_id,
-                          "part_number": part_number,
-                          "Etag": part["ETag"],
-                          "uploaded": uploaded_bytes,
-                          "size": self.total_bytes,
-                          "last_modified": datetime.utcnow(),
-                          "status": status_}
-                await storage.update_data(query=query,
-                                          update=update,
-                                          collection=collection)
-
+                logging.info(
+                    f"""{uploaded_bytes} of {self.total_bytes} bytes \
+                uploaded {await self.as_percent(uploaded_bytes,
+                                                self.total_bytes)}%""")
                 parts.append({"PartNumber": part_number, "ETag": part["ETag"]})
-            uploaded_bytes += len(data)
-            logging.info(
-                f"""{uploaded_bytes} of {self.total_bytes} bytes \
-            uploaded {await self.as_percent(uploaded_bytes,
-                                            self.total_bytes)}%
-            """)
+
+            # Uploading intermediate data to MongoDB
+            update = {"object_name": object_name,
+                      "node": endpoint,
+                      "mpu_id": mpu_id,
+                      "part_number": part_number,
+                      "Etag": part["ETag"],
+                      "uploaded": uploaded_bytes,
+                      "size": self.total_bytes,
+                      "last_modified": datetime.utcnow(),
+                      "status": status_}
+            await storage.update_data(query=query,
+                                      update=update,
+                                      collection=collection)
+            logging.info(f"Uploading intermediate data to storage for object: "
+                         f"'{object_name}' with mpu_id: '{mpu_id}', "
+                         f"part_number: '{part_number}, "
+                         f"status: '{status_}'")
+
             part_number += 1
 
         return parts

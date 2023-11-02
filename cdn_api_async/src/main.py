@@ -9,9 +9,9 @@ from api.v1 import films
 from core.config import settings, mongo_settings, cron_settings
 from core.logger import LOGGING
 from db import mongo
-from db.aws_s3 import AWSS3
+from db.aws_s3 import AWSS3, S3MultipartUpload
 from db.scheduler import jobs, get_scheduler
-from services.scheduler import finish_in_progress_tasks
+from services.scheduler import finish_in_progress_tasks, abort_old_tasks
 
 
 async def startup():
@@ -33,12 +33,23 @@ async def startup():
                finish_in_progress_tasks,
                args=(AWSS3, mongo.mongo),
                trigger='cron',
+               # trigger='interval',
                minute=cron_settings.finish_in_progress_tasks['minute'],
                second=cron_settings.finish_in_progress_tasks['second'],
                timezone=cron_settings.finish_in_progress_tasks['timezone']
                )
+    await jobs(job,
+               abort_old_tasks,
+               args=(S3MultipartUpload, mongo.mongo),
+               trigger='cron',
+               # trigger='interval',
+               minute=cron_settings.abort_old_tasks['minute'],
+               second=cron_settings.abort_old_tasks['second'],
+               timezone=cron_settings.abort_old_tasks['timezone']
+               )
     job.start()
     logging.info(f'List of scheduled jobs: {job.get_jobs()}')
+
 
 async def shutdown():
     job = await get_scheduler()

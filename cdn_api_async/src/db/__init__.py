@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from minio.datatypes import Object
+from pymongo.results import DeleteResult
 
 from models.model import Model
 
@@ -103,4 +104,12 @@ class AbstractStorage(ABC):
             update: dict,
             collection: str,
     ) -> None:
+        pass
+
+    @abstractmethod
+    async def delete_data(
+            self,
+            document: Model | dict,
+            collection: str,
+    ) -> DeleteResult:
         pass

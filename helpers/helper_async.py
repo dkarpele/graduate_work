@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime, timedelta
 from json import JSONDecodeError, loads
 from typing import Any, Type
 
@@ -159,13 +160,19 @@ async def is_scheduler_in_progress(storage: AbstractStorage,
 
 
 async def get_in_progress_objects(storage: AbstractStorage,
-                                  collection: str) -> list:
-    query = {'status': 'in_progress'}
+                                  collection: str,
+                                  threshold: dict) -> list:
+
+    query = {'$or': [{'status': 'in_progress'},
+                     {'status': 'scheduler_in_progress'}
+                     ],
+             'last_modified': threshold
+             }
     projection = {'object_name': 1,
-                  'node': 1,}
+                  'node': 1, }
     res = await storage.get_data(query=query,
                                  collection=collection,
-                                 projection=projection
+                                 projection=projection,
                                  )
     return res
 

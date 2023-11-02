@@ -20,7 +20,8 @@ LOGGING = {
         },
         'access': {
             '()': 'uvicorn.logging.AccessFormatter',
-            'fmt': "%(levelprefix)s %(client_addr)s - '%(request_line)s' %(status_code)s",
+            'fmt': "%(levelprefix)s %(client_addr)s - "
+                   "'%(request_line)s' %(status_code)s",
         },
     },
     'handlers': {

@@ -72,4 +72,3 @@ persons = [
 ]
 
 data = {'movies': movies, 'genres': genres, 'persons': persons}
-

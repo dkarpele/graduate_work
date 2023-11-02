@@ -3,3 +3,5 @@ exclude =
     __pycache__
     env
     .env
+    cdn_api_sync
+    archived_cdn_api_async

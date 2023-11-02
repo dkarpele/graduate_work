@@ -27,5 +27,3 @@ async def redis_clear_data_before():
                             port=settings.redis_port)
     redis_cli.flushall()
     yield
-
-

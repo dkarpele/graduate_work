@@ -6,16 +6,15 @@ Manager -> API_service_upload: Send File
 
 activate API_service_upload
 API_service_upload -> S3: Upload File
-API_service_upload --> Postgres_OR_redis: Save file info and status
+API_service_upload --> redis: Save file info and status
 deactivate API_service_upload
 
 activate S3
-S3 <- CloudFront: Use CloudFront to show file
-activate CloudFront
-CloudFront <- API_service_get: Gets File from CDN
+
+S3 <- API_service_get: Gets File from CDN
+redis <- API_service_get: Checks file status
 activate API_service_get
 API_service_get <-> Client: Client gets expected file
-deactivate CloudFront
 deactivate API_service_get
 deactivate S3
 

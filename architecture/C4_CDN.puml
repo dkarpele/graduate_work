@@ -1,0 +1,23 @@
+@startuml
+
+==Get url. Object doesn't exist on edge location==
+Client -> API_service_get: Client wants URL\nto receive object
+activate API_service_get
+API_service_get --> API_service_get: Try to find the closest node
+API_service_get -> S3_Edge: Gets File from the closest location if file exists
+activate S3_Edge
+S3_Edge --> API_service_get: Return object
+
+API_service_get -> S3_Origin: Gets File from the origin\nlocation if not exists on edge
+activate S3_Origin
+S3_Origin -> API_service_get: Return object
+S3_Origin -> S3_Edge: Upload file from origin to edge
+
+deactivate S3_Edge
+deactivate S3_Origin
+
+API_service_get -> Client: Shows URL
+deactivate API_service_get
+
+
+@enduml

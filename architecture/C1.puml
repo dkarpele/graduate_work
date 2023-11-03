@@ -6,19 +6,18 @@ actor Client
 component API_service_upload
 component API_service_get
 database S3
-component CloudFront
-database Postgres_OR_Redis
+
+database Redis
 component Scheduler
 
 
 Manager -right-> API_service_upload: Upload File
 
 API_service_upload -right-> S3: Upload file to S3
-S3 <-right- CloudFront: Use CloudFront to show file
-CloudFront <-right- API_service_get: Gets File from CDN
-API_service_get <-right-> Client: Client gets expected file\nfrom the nearest location
-API_service_upload -down-> Postgres_OR_Redis: Save information about\nlatest uploaded to S3 part
-Scheduler <-left-> Postgres_OR_Redis: Periodically checks\nnon-finished uploads
-Scheduler -up-> S3: Upload file to S3,\nRemove data from database
+S3 <-right- API_service_get: Gets File from CDN
+API_service_get <-right-> Client: Client gets expected file\nfrom the closest location
+API_service_upload -down-> Redis: Save information about\nlatest uploaded part to S3
+Scheduler <-left-> Redis: Periodically checks\nnon-finished uploads
+Scheduler -up-> S3: Upload file to S3,\nUpdate data in database (status=Finished)
 
 @enduml

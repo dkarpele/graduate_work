@@ -1,22 +1,20 @@
 @startuml
 
-==Failed upload==
+==Start after failure. It works the same for manual file upload and\nCDN(upload from origin node to edge).==
 
-Scheduler <--> Postgres_OR_redis: Scheduler gets file\ndata from DB
-activate Postgres_OR_redis
+Scheduler <--> redis: Scheduler gets file\ndata from DB
+activate redis
 activate Scheduler
-Scheduler -> Postgres_OR_redis: Update file status
-deactivate Postgres_OR_redis
-Scheduler -> S3: Upload File
+Scheduler -> redis: Update file status
+deactivate redis
+Scheduler -> S3: Multipart File Upload
 deactivate Scheduler
 
 activate S3
-S3 <- CloudFront: Use CloudFront to show file
-activate CloudFront
-CloudFront <- API_service_get: Gets File from CDN
+
+S3 <- API_service_get: Gets File from CDN
 activate API_service_get
 API_service_get <-> Client: Client gets expected file
-deactivate CloudFront
 deactivate API_service_get
 deactivate S3
 @enduml

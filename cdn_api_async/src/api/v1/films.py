@@ -22,8 +22,8 @@ router = APIRouter()
 
 
 @router.get('/{object_name}',
-            summary="Get URL to preview film",
-            response_description="Redirects to url to preview film",
+            summary="Get URL to preview object (movie, music, photo)",
+            response_description="Redirects to url to preview object",
             )
 async def object_url(
         request: Request,
@@ -97,6 +97,39 @@ async def object_url(
     return RedirectResponse(url=url)
 
 
+@router.get('/{object_name}/status',
+            response_model=None,
+            summary="Get status of the object uploading",
+            response_description="Redirects to url to preview film",
+            )
+async def object_status(
+        object_name: str,
+        mongo: MongoDep
+) -> list | HTTPException:
+    query = {"object_name": object_name}
+    projection = {"status": 1,
+                  "node": 1}
+    object_api = await mongo.get_data(query, "api", projection)
+    res = []
+    if object_api:
+        res.append(f"'{object_name}' has status '{object_api[0]['status']}' on"
+                   f" node '{object_api[0]['node']}'")
+
+    object_cdn = await mongo.get_data(query, "cdn", projection)
+    if object_cdn:
+        res.append(f"'{object_name}' has status '{object_cdn[0]['status']}' on"
+                   f" node '{object_cdn[0]['node']}'")
+
+    if res:
+        return res
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Object {object_name} not found.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 @router.post('/upload_object',
              response_model=None,
              summary="Upload object to storage",
@@ -104,7 +137,7 @@ async def object_url(
 async def upload_object(
         file_upload: UploadFile,
         mongo: MongoDep
-) -> Union[str | HTTPException]:
+) -> str | HTTPException:
     active_nodes = await get_active_nodes()
     origin_node = await origin_is_alive(active_nodes)
     filename = file_upload.filename
@@ -137,7 +170,7 @@ async def upload_object(
                               mpu_id=mpu_id):
         return f"Upload {filename} completed successfully."
     else:
-        return HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Upload failed. Please retry",
             headers={"WWW-Authenticate": "Bearer"},

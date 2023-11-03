@@ -1,3 +1,4 @@
+import os
 from logging import config as logging_config
 
 from pydantic import BaseSettings, Field
@@ -39,6 +40,15 @@ class MongoCreds(MainConf):
 
 
 mongo_settings = MongoCreds()
+
+
+class RateLimit(MainConf):
+    request_limit_per_minute: int = Field(env="REQUEST_LIMIT_PER_MINUTE",
+                                          default=20)
+    is_rate_limit: bool = (os.getenv('IS_RATE_LIMIT', 'False') == 'True')
+
+
+rl = RateLimit()
 
 
 class CronSettings:

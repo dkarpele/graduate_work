@@ -1,6 +1,5 @@
 @startuml
 skinparam componentStyle uml2
-skinparam monochrome reverse
 
 actor Manager
 actor Client

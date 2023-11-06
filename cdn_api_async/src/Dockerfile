@@ -13,5 +13,5 @@ RUN pip install --upgrade pip \
 
 COPY . ./src
 
-CMD ["/bin/sh", "-c", "pwd; cd src ; \
+CMD ["/bin/sh", "-c", "pwd; cd src ; ls ; \
 gunicorn -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:8000"]

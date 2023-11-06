@@ -4,7 +4,7 @@ from datetime import timedelta
 import aiohttp
 from aiohttp import ClientResponse
 from fastapi import HTTPException, status
-from minio.datatypes import Object
+from miniopy_async.datatypes import Object
 from miniopy_async import Minio, S3Error
 
 from db import AbstractS3

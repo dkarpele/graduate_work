@@ -6,8 +6,8 @@ from typing import Any
 from aioboto3 import Session
 from aiofiles import open
 from fastapi import HTTPException, status
-from minio import S3Error
-from minio.datatypes import Object
+from miniopy_async import S3Error
+from miniopy_async.datatypes import Object
 
 from core.config import settings
 from db import AbstractS3

@@ -1,6 +1,6 @@
 @startuml
 
-==Start after failure. It works the same for manual file upload and\nCDN(upload from origin node to edge).==
+==Start after failure. It works the same for manual file upload and\nCDN (upload from origin node to edge).==
 
 Scheduler <--> redis: Scheduler gets file\ndata from DB
 activate redis

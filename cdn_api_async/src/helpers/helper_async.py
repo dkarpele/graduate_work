@@ -179,7 +179,7 @@ async def get_in_progress_objects(storage: AbstractStorage,
 async def main():
     print(await find_closest_node('137.0.0.1',
                                   await get_active_nodes(
-                                      "../.env.minio.json")))
+                                      "../../../.env.minio.json")))
 
 
 if __name__ == "__main__":

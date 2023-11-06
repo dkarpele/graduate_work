@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from minio.datatypes import Object
+from miniopy_async.datatypes import Object
 from pymongo.results import DeleteResult
 
 from models.model import Model

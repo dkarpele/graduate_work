@@ -5,14 +5,14 @@
 1. Clone [repo](https://github.com/dkarpele/graduate_work).
 2. Create ```.env``` file according to ```.env.example```.
 3. Create ```.env.minio.json``` file according to ```.env.minio.json.example```.
-4Launch the project ```docker-compose up --build```.
+4. Launch the project ```docker-compose up --build```.
 
 
 #### [architecture](architecture)
 
 Architecture for the CDN service described here.
 
-#### [CDN](cdn)
+#### [CDN](cdn_api_async_redis)
 
 We use MinIO as a S3 and redis as a cache. 
 

@@ -2,36 +2,29 @@ import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.responses import ORJSONResponse
 
 from api.v1 import films
-from core.config import settings, mongo_settings, cron_settings
+from core.config import settings, cron_settings
 from core.logger import LOGGING
-from db import mongo
+from db import redis
 from db.aws_s3 import AWSS3, S3MultipartUpload
 from db.scheduler import jobs, get_scheduler
+from services.redis import rate_limit
 from services.scheduler import finish_in_progress_tasks, abort_old_tasks
 
 
 async def startup():
-    if mongo_settings.user and mongo_settings.password:
-        mongo.mongo = mongo.Mongo(
-            f'mongodb://'
-            f'{mongo_settings.user}:{mongo_settings.password}@'
-            f'{mongo_settings.host}:{mongo_settings.port}'
-        )
-    else:
-        mongo.mongo = mongo.Mongo(
-            f'mongodb://'
-            f'{mongo_settings.host}:{mongo_settings.port}'
-        )
+    redis.redis = redis.Redis(host=settings.redis_host,
+                              port=settings.redis_port,
+                              ssl=False)
 
     # Connecting to scheduler
     job = await get_scheduler()
     await jobs(job,
                finish_in_progress_tasks,
-               args=(AWSS3, mongo.mongo),
+               args=(AWSS3, redis.redis),
                trigger='cron',
                # trigger='interval',
                minute=cron_settings.finish_in_progress_tasks['minute'],
@@ -40,7 +33,7 @@ async def startup():
                )
     await jobs(job,
                abort_old_tasks,
-               args=(S3MultipartUpload, mongo.mongo),
+               args=(S3MultipartUpload, redis.redis),
                trigger='cron',
                # trigger='interval',
                minute=cron_settings.abort_old_tasks['minute'],
@@ -70,7 +63,8 @@ app = FastAPI(
     docs_url='/api/openapi-cdn',
     openapi_url='/api/openapi-cdn.json',
     default_response_class=ORJSONResponse,
-    lifespan=lifespan)
+    lifespan=lifespan,
+    dependencies=[Depends(rate_limit)])
 
 app.include_router(films.router, prefix='/api/v1/films', tags=['films'])
 

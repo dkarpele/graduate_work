@@ -3,7 +3,7 @@ from datetime import datetime
 
 from fastapi import UploadFile
 
-from db import AbstractStorage, AbstractS3
+from db import AbstractStorage, AbstractS3, AbstractCache
 from db.aws_s3 import S3MultipartUpload
 
 
@@ -16,7 +16,7 @@ class CDNService:
                         object_name=object_name)
 
 
-async def multipart_upload(storage: AbstractStorage,
+async def multipart_upload(cache: AbstractCache,
                            upload_client: S3MultipartUpload,
                            status: str,
                            origin_client: AbstractS3 | None = None,
@@ -34,7 +34,7 @@ async def multipart_upload(storage: AbstractStorage,
             parts = await upload_client.upload_bytes(
                 s3=s3,
                 mpu_id=mpu_id,
-                storage=storage,
+                cache=cache,
                 status_=status,
                 parts=finished_parts,
                 origin_client=origin_client,
@@ -54,7 +54,7 @@ async def multipart_upload(storage: AbstractStorage,
             parts = await upload_client.upload_bytes(
                 s3=s3,
                 mpu_id=mpu_id,
-                storage=storage,
+                cache=cache,
                 status_=status,
                 origin_client=origin_client,
                 origin_client_s3=origin_client_s3,
@@ -67,15 +67,12 @@ async def multipart_upload(storage: AbstractStorage,
 
     # Uploading finished status to MongoDB
     object_name = upload_client.key
-    query = {"object_name": object_name,
-             "node": upload_client.endpoint}
-    update = {"object_name": object_name,
-              "uploaded": upload_client.total_bytes,
-              "last_modified": datetime.utcnow(),
-              "status": "finished"}
-    await storage.update_data(query=query,
-                              update=update,
-                              collection=collection)
+    status_ = "finished"
+    key = f"{collection}^{object_name}^{upload_client.endpoint}"
+    entity = {"last_modified": str(datetime.utcnow()),
+              "status": status_}
+    await cache.put_to_cache_by_key(key, entity)
+
     logging.info(f"Upload completed with metadata: "
                  f"{res}")
     return res

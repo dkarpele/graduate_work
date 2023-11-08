@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 from geopy.distance import distance
 
 from core.config import settings
-from db import AbstractS3, AbstractStorage
+from db import AbstractS3, AbstractStorage, AbstractCache
 from helpers.exceptions import locations_not_available
-from models.model import Node
+from models.model import Node, Model
 
 load_dotenv()
 
@@ -128,37 +128,37 @@ async def object_exists(client: Type[AbstractS3],
 
 async def get_mpu_id(endpoint: str,
                      filename: str,
-                     storage: AbstractStorage,
+                     cache: AbstractCache,
                      collection: str = "api"):
     # If upload was failed - try to re-upload it with current mpu_id
-    mpu_id_query = {'object_name': filename,
-                    'node': endpoint,
-                    'status': 'in_progress'}
-    projection = {'mpu_id': 1}
-    res = await storage.get_data(query=mpu_id_query,
-                                 collection=collection,
-                                 projection=projection
-                                 )
-    return res[0]['mpu_id'] if res else None
+    key: str = f"{collection}^{filename}^{endpoint}"
+
+    res = await cache.get_from_cache_by_key(key)
+    try:
+        if str(res[b'status'], 'utf-8') == 'in_progress':
+            return str(res[b'mpu_id'], 'utf-8')
+    except TypeError:
+        return None
 
 
-async def is_scheduler_in_progress(storage: AbstractStorage,
+async def is_scheduler_in_progress(cache: AbstractCache,
                                    node: Node,
                                    object_: str,
-                                   collection: str) -> list:
+                                   collection: str) -> dict | None:
     endpoint = 'http://' + node.endpoint
-    query = {'object_name': object_,
-             'node': endpoint,
-             'status': 'scheduler_in_progress'}
-    projection = {'object_name': 1}
-    res = await storage.get_data(query=query,
-                                 collection=collection,
-                                 projection=projection
-                                 )
-    return res
+    key: str = f"{collection}^{object_}^{endpoint}"
+
+    res = await cache.get_from_cache_by_key(key)
+    try:
+        if str(res[b'status'], 'utf-8') == 'scheduler_in_progress':
+            return res
+        else:
+            return None
+    except TypeError:
+        return None
 
 
-async def get_in_progress_objects(storage: AbstractStorage,
+async def get_in_progress_objects(cache: AbstractCache,
                                   collection: str,
                                   threshold: dict) -> list:
 
@@ -169,7 +169,7 @@ async def get_in_progress_objects(storage: AbstractStorage,
              }
     projection = {'object_name': 1,
                   'node': 1, }
-    res = await storage.get_data(query=query,
+    res = await cache.get_data(query=query,
                                  collection=collection,
                                  projection=projection,
                                  )

@@ -7,8 +7,8 @@ from aiofiles import os
 from aioshutil import rmtree
 
 from core.config import settings
-from db import AbstractS3, AbstractStorage
-from db.aws_s3 import S3MultipartUpload
+from db import AbstractS3, AbstractStorage, AbstractCache
+from db.aws_s3 import S3MultipartUpload, AWSS3
 from helpers.exceptions import object_already_uploaded
 from helpers.helper_async import get_mpu_id, get_in_progress_objects, \
     origin_is_alive, get_active_nodes
@@ -68,10 +68,10 @@ async def copy_object_to_node(client: Type[AbstractS3],
                               object_name: str,
                               origin_node: Node,
                               edge_node: Node,
-                              storage: AbstractStorage,
+                              cache: AbstractCache,
                               status: str) -> None:
     # Check that object wasn't uploaded yet and not blocked by scheduler
-    storage_data = (storage, edge_node, object_name, "cdn")
+    storage_data = (cache, edge_node, object_name, "cdn")
     await object_already_uploaded(*storage_data)
 
     origin_client: AbstractS3 = client(
@@ -102,13 +102,13 @@ async def copy_object_to_node(client: Type[AbstractS3],
         # If upload was failed - try to re-upload it with current mpu_id
         mpu_id = await get_mpu_id(endpoint,
                                   object_name,
-                                  storage,
+                                  cache,
                                   collection="cdn")
 
         logging.info(
             f"Uploading '{object_name}' from '{origin_client.endpoint}' to "
             f"'{edge_client.endpoint}'.")
-        await multipart_upload(storage=storage,
+        await multipart_upload(cache=cache,
                                upload_client=edge_client,
                                origin_client=origin_client,
                                origin_client_s3=s3,
@@ -118,52 +118,51 @@ async def copy_object_to_node(client: Type[AbstractS3],
                                )
 
 
-async def finish_in_progress_tasks(client: Type[AbstractS3],
-                                   storage: AbstractStorage, ) -> None:
-    time_ = datetime.utcnow() - timedelta(hours=6)
-    threshold = {
-        '$gt': time_
-    }
+async def finish_in_progress_tasks(client: Type[AWSS3],
+                                   cache: AbstractCache, ) -> None:
+    time_now = datetime.utcnow() - timedelta(hours=6)
+
     active_nodes = await get_active_nodes()
     origin_node = await origin_is_alive(active_nodes)
 
-    objects_: list = await get_in_progress_objects(storage,
-                                                   "cdn",
-                                                   threshold)
-    if not objects_:
-        logging.info(f"No in progress objects from {time_}. Everything good.")
-        return
+    for node in active_nodes.values():
+        endpoint = 'http://' + node.endpoint
 
-    for i in objects_:
-        # Trying to find Node object
-        edge_node = [j
-                     for j in active_nodes.values()
-                     if j.endpoint in i['node']
-                     ]
-        if edge_node:
-            await copy_object_to_node(client,
-                                      i['object_name'],
-                                      origin_node,
-                                      edge_node[0],
-                                      storage,
-                                      "scheduler_in_progress")
-        else:
-            logging.info(f"No in progress objects from {time_}. "
-                         f"Everything good.")
+        async for key in await cache.scan_iter(f"cdn^*^{endpoint}"):
+            if not key:
+                logging.info(
+                    f"No in progress objects from {time_now} for "
+                    f"{endpoint}. Everything good.")
+            else:
+                obj = await cache.get_from_cache_by_key(key)
+                key = str(key, 'utf-8')
+                object_name = key[key.index('^') + 1:key.rindex('^')]
+                last_modified = datetime.strptime(str(obj[b'last_modified'],
+                                                      'utf-8'),
+                                                  '%Y-%m-%d %H:%M:%S.%f')
+                if str(obj[b'status'], 'utf-8') in ('in_progress',
+                                                    'scheduler_in_progress') \
+                        and last_modified > time_now:
+                    await copy_object_to_node(client,
+                                              object_name,
+                                              origin_node,
+                                              node,
+                                              cache,
+                                              "scheduler_in_progress")
 
 
 async def abort_old_tasks(client: Type[S3MultipartUpload],
-                          storage: AbstractStorage, ):
+                          cache: AbstractCache, ):
     time_ = datetime.utcnow() - timedelta(hours=6)
     threshold = {
         '$lt': time_
     }
     active_nodes = await get_active_nodes()
 
-    objects_cdn: list = await get_in_progress_objects(storage,
+    objects_cdn: list = await get_in_progress_objects(cache,
                                                       "cdn",
                                                       threshold)
-    objects_api: list = await get_in_progress_objects(storage,
+    objects_api: list = await get_in_progress_objects(cache,
                                                       "api",
                                                       threshold)
     objects_ = objects_api + objects_cdn

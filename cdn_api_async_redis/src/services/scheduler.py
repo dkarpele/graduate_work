@@ -7,11 +7,11 @@ from aiofiles import os
 from aioshutil import rmtree
 
 from core.config import settings
-from db import AbstractS3, AbstractStorage, AbstractCache
+from db import AbstractS3, AbstractCache
 from db.aws_s3 import S3MultipartUpload, AWSS3
 from helpers.exceptions import object_already_uploaded
 from helpers.helper_async import get_mpu_id, get_in_progress_objects, \
-    origin_is_alive, get_active_nodes
+    get_active_nodes, origin_is_alive
 from models.model import Node
 from services.service import multipart_upload
 
@@ -120,15 +120,80 @@ async def copy_object_to_node(client: Type[AbstractS3],
 
 async def finish_in_progress_tasks(client: Type[AWSS3],
                                    cache: AbstractCache, ) -> None:
-    time_now = datetime.utcnow() - timedelta(hours=6)
+    key_pattern = f"cdn^*^"
+    await get_cached_values(cache,
+                            client,
+                            key_pattern,
+                            True)
 
+
+async def abort_old_tasks(client: Type[S3MultipartUpload],
+                          cache: AbstractCache, ):
+    key_pattern = f"^*^"
+    await get_cached_values(cache,
+                            client,
+                            key_pattern,
+                            finish=False)
+
+    #
+    # threshold = {
+    #     '$lt': time_
+    # }
+    # active_nodes = await get_active_nodes()
+    #
+    # objects_cdn: list = await get_in_progress_objects(cache,
+    #                                                   "cdn",
+    #                                                   threshold)
+    # objects_api: list = await get_in_progress_objects(cache,
+    #                                                   "api",
+    #                                                   threshold)
+    # objects_ = objects_api + objects_cdn
+    # if not objects_:
+    #     logging.info(f"No in progress objects older than {time_}. "
+    #                  f"Everything good.")
+    #     return
+    #
+    # for i in objects_:
+    #     # Trying to find Node object
+    #     edge_node = [j
+    #                  for j in active_nodes.values()
+    #                  if j.endpoint in i['node']
+    #                  ]
+    #     if edge_node:
+    #         en = edge_node[0]
+    #         endpoint = 'http://' + en.endpoint
+    #         edge_client_dict = {
+    #             'endpoint': endpoint,
+    #             'aws_access_key_id': en.access_key_id,
+    #             'aws_secret_access_key': en.secret_access_key,
+    #             'verify': False}
+    #         edge_client = client(settings.bucket_name,
+    #                              i['object_name'],
+    #                              **edge_client_dict)
+    #         async with edge_client.client as s3:
+    #             await edge_client.abort_all(s3)
+    #
+    #         # clear storage
+    #         document = {"object_name": i['object_name']}
+    #         await cache.delete_from_cache_by_id(document, "api")
+    #         await cache.delete_from_cache_by_id(document, "cdn")
+    #     else:
+    #         logging.info(f"No in progress objects older than {time_}. "
+    #                      f"Everything good.")
+
+
+async def get_cached_values(cache: AbstractCache,
+                            client: Type[AWSS3],
+                            key_pattern: str,
+                            finish: bool = True):
+    time_now = datetime.utcnow() - timedelta(hours=6)
     active_nodes = await get_active_nodes()
     origin_node = await origin_is_alive(active_nodes)
 
     for node in active_nodes.values():
         endpoint = 'http://' + node.endpoint
-
-        async for key in await cache.scan_iter(f"cdn^*^{endpoint}"):
+        key_pattern += endpoint
+        async for key in await cache.scan_iter(key_pattern):
             if not key:
                 logging.info(
                     f"No in progress objects from {time_now} for "
@@ -140,61 +205,30 @@ async def finish_in_progress_tasks(client: Type[AWSS3],
                 last_modified = datetime.strptime(str(obj[b'last_modified'],
                                                       'utf-8'),
                                                   '%Y-%m-%d %H:%M:%S.%f')
+                comparing = last_modified > time_now \
+                    if finish \
+                    else last_modified < time_now
                 if str(obj[b'status'], 'utf-8') in ('in_progress',
                                                     'scheduler_in_progress') \
-                        and last_modified > time_now:
-                    await copy_object_to_node(client,
-                                              object_name,
-                                              origin_node,
-                                              node,
-                                              cache,
-                                              "scheduler_in_progress")
-
-
-async def abort_old_tasks(client: Type[S3MultipartUpload],
-                          cache: AbstractCache, ):
-    time_ = datetime.utcnow() - timedelta(hours=6)
-    threshold = {
-        '$lt': time_
-    }
-    active_nodes = await get_active_nodes()
-
-    objects_cdn: list = await get_in_progress_objects(cache,
-                                                      "cdn",
-                                                      threshold)
-    objects_api: list = await get_in_progress_objects(cache,
-                                                      "api",
-                                                      threshold)
-    objects_ = objects_api + objects_cdn
-    if not objects_:
-        logging.info(f"No in progress objects older than {time_}. "
-                     f"Everything good.")
-        return
-
-    for i in objects_:
-        # Trying to find Node object
-        edge_node = [j
-                     for j in active_nodes.values()
-                     if j.endpoint in i['node']
-                     ]
-        if edge_node:
-            en = edge_node[0]
-            endpoint = 'http://' + en.endpoint
-            edge_client_dict = {
-                'endpoint': endpoint,
-                'aws_access_key_id': en.access_key_id,
-                'aws_secret_access_key': en.secret_access_key,
-                'verify': False}
-            edge_client = client(settings.bucket_name,
-                                 i['object_name'],
-                                 **edge_client_dict)
-            async with edge_client.client as s3:
-                await edge_client.abort_all(s3)
-
-            # clear storage
-            document = {"object_name": i['object_name']}
-            await cache.delete_from_cache_by_id(document, "api")
-            await cache.delete_from_cache_by_id(document, "cdn")
-        else:
-            logging.info(f"No in progress objects older than {time_}. "
-                         f"Everything good.")
+                        and comparing:
+                    if finish:
+                        await copy_object_to_node(client,
+                                                  object_name,
+                                                  origin_node,
+                                                  node,
+                                                  cache,
+                                                  "scheduler_in_progress")
+                    else:
+                        client_dict = {
+                            'endpoint': endpoint,
+                            'aws_access_key_id': node.access_key_id,
+                            'aws_secret_access_key': node.secret_access_key,
+                            'verify': False}
+                        client = S3MultipartUpload(settings.bucket_name,
+                                                        object_name,
+                                                        **client_dict)
+                        async with client.client as s3:
+                            mpu_id = str(obj[b'mpu_id'], 'utf-8')
+                            await client.abort_multipart_upload(s3,
+                                                                mpu_id)
+                            await cache.delete_from_cache_by_id(key)

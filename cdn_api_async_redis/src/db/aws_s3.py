@@ -3,16 +3,15 @@ import os
 from datetime import datetime
 from typing import Any
 
-from botocore.exceptions import ClientError
 from aioboto3 import Session
 from aiofiles import open
+from botocore.exceptions import ClientError
 from fastapi import HTTPException, status
 from miniopy_async import S3Error
 from miniopy_async.datatypes import Object
 
 from core.config import settings
 from db import AbstractS3, AbstractCache
-from db import AbstractStorage
 
 
 class AWSS3(AbstractS3):
@@ -123,6 +122,17 @@ class S3MultipartUpload(AWSS3):
         except ClientError as e:
             logging.info(e)
             return {}
+
+    async def abort_multipart_upload(self, s3, upload_id):
+        try:
+            await s3.abort_multipart_upload(Bucket=self.bucket,
+                                            Key=self.key,
+                                            UploadId=upload_id)
+            logging.info(f"Upload aborted for '{self.key}' in "
+                         f"'{self.endpoint}'")
+        except ClientError as e:
+            logging.info(e)
+            return False
 
     async def abort_all(self, s3):
         mpus = await self.list_multipart_uploads(s3)

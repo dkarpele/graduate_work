@@ -3,7 +3,7 @@ from datetime import datetime
 
 from fastapi import UploadFile
 
-from db import AbstractStorage, AbstractS3, AbstractCache
+from db import AbstractS3, AbstractCache
 from db.aws_s3 import S3MultipartUpload
 
 

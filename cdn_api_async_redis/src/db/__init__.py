@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, AsyncIterator
+from typing import Optional
 
 from miniopy_async.datatypes import Object
 from pymongo.results import DeleteResult

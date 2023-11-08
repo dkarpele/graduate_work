@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 from geopy.distance import distance
 
 from core.config import settings
-from db import AbstractS3, AbstractStorage, AbstractCache
+from db import AbstractS3, AbstractCache
 from helpers.exceptions import locations_not_available
-from models.model import Node, Model
+from models.model import Node
 
 load_dotenv()
 
@@ -161,7 +161,6 @@ async def is_scheduler_in_progress(cache: AbstractCache,
 async def get_in_progress_objects(cache: AbstractCache,
                                   collection: str,
                                   threshold: dict) -> list:
-
     query = {'$or': [{'status': 'in_progress'},
                      {'status': 'scheduler_in_progress'}
                      ],
@@ -170,9 +169,9 @@ async def get_in_progress_objects(cache: AbstractCache,
     projection = {'object_name': 1,
                   'node': 1, }
     res = await cache.get_data(query=query,
-                                 collection=collection,
-                                 projection=projection,
-                                 )
+                               collection=collection,
+                               projection=projection,
+                               )
     return res
 
 

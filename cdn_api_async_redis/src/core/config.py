@@ -43,8 +43,8 @@ rl = RateLimit()
 class CronSettings:
     finish_in_progress_tasks: dict = {
         'hour': 19,
-        'minute': 40,
-        'second': 35,
+        'minute': 2,
+        'second': 3,
         'timezone': 'UTC'
     }
     abort_old_tasks: dict = {

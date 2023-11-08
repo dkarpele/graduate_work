@@ -1,6 +1,5 @@
-import json
+from typing import Optional
 
-from typing import Optional, AsyncIterator
 from redis.asyncio import Redis as AsyncRedis
 
 from core.config import settings
@@ -44,8 +43,8 @@ class Redis(AbstractCache):
 
         await self.session.hset(name=key,
                                 mapping=entities)
-        await self.session.expire(name=key,
-                                  time=settings.cache_expire_in_seconds)
+        # await self.session.expire(name=key,
+        #                           time=settings.cache_expire_in_seconds)
 
     async def create_pipeline(self):
         return self.session.pipeline()

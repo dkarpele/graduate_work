@@ -5,3 +5,4 @@ exclude =
     .env
     cdn_api_sync
     archived_cdn_api_async
+    cdn_api_async

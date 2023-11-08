@@ -55,4 +55,4 @@ jobs:
           python3 -m pip install types-redis
       - name: Check src
         run: |
-          mypy --ignore-missing-imports ./cdn_api_async
+          mypy --ignore-missing-imports ./cdn_api_async_redis

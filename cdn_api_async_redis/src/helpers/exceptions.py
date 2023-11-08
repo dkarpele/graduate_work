@@ -1,10 +1,9 @@
 import logging
 
 from fastapi import HTTPException, status
-from typing import Type
 
-from db import AbstractStorage, AbstractCache
-from models.model import Node, Model
+from db import AbstractCache
+from models.model import Node
 
 credentials_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -52,8 +51,8 @@ async def object_already_uploaded(cache: AbstractCache,
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"{object_} was already successfully uploaded to"
-                       f" {endpoint}. If you want to upload an object with the "
-                       f"same name, you need to remove the old one first.",
+                       f" {endpoint}. If you want to upload an object with the"
+                       f" same name, you need to remove the old one first.",
                 headers={"WWW-Authenticate": "Bearer"},
             )
     except TypeError:

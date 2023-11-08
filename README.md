@@ -4,37 +4,35 @@
 
 1. Clone [repo](https://github.com/dkarpele/graduate_work).
 2. Create ```.env``` file according to ```.env.example```.
-3. Launch the project ```docker-compose up --build```.
+3. Create ```.env.minio.json``` file according to ```.env.minio.json.example```.
+4Launch the project ```docker-compose up --build```.
 
 
 #### [architecture](architecture)
 
-Architecture for the notifications service described here.
+Architecture for the CDN service described here.
 
-#### [notifications](notifications)
+#### [CDN](cdn)
 
-We use RabbitMQ as a broker and Sendgrid as an SMTP client. 
+We use MinIO as a S3 and redis as a cache. 
 
-**Notify email**
+**API**
 
-- POST http://127.0.0.1/api/v1/notify-email/user-sign-up - send email notification to user after signing up
+- GET http://127.0.0.1/api/v1/films/{object_name} - Get URL to preview object (movie, music, photo). Redirects to url to preview object
+- GET http://127.0.0.1/api/v1/films/{object_name}/status - Get status of the object uploading to S3
+- POST http://127.0.0.1/api/v1/films/upload_object - upload object to storage
+- DELETE http://127.0.0.1/api/v1/films/delete_object - delete object from alll nodes
 
 **Scheduler**
 
-- likes_for_reviews. We send users an aggregated information about likes they received for their reviews to movies during last 24 hours. 
+- finish_in_progress_tasks. If the task failed during last 6 hours, scheduler finish uploading
+- abort_old_tasks. The task will remove all in_progress tasks older than 6 hours
 
-**Sendgrid**
-
-With the help from Sendgrid we are sending individual and multiple emails. 
-Sendgrid Marketing panel is used to send multiple emails to users from content manager. 
-
-**Postgres**
+**Redis**
 
 After every action the transition status in the database changes:
 
-Initiated -> Produced -> Consumed -> Sent.
+in_progress -> finished.
 
-- Initiated - message created
-- Produced - message has been sent to queue
-- Consumed - message has been received from queue
-- Sent - message was sent to user (now by SMTP using Sendgrid)
+- in_progress - part of the file was uploaded to S3
+- finished - upload finished

@@ -193,8 +193,8 @@ async def abort_old_tasks(client: Type[S3MultipartUpload],
 
             # clear storage
             document = {"object_name": i['object_name']}
-            await storage.delete_data(document, "api")
-            await storage.delete_data(document, "cdn")
+            await cache.delete_from_cache_by_id(document, "api")
+            await cache.delete_from_cache_by_id(document, "cdn")
         else:
             logging.info(f"No in progress objects older than {time_}. "
                          f"Everything good.")

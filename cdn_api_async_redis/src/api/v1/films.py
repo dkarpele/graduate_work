@@ -99,7 +99,6 @@ async def object_url(
 @router.get('/{object_name}/status',
             response_model=None,
             summary="Get status of the object uploading",
-            response_description="Redirects to url to preview film",
             )
 async def object_status(
         object_name: str,

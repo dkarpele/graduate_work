@@ -27,18 +27,18 @@ async def startup():
                args=(AWSS3, redis.redis),
                # trigger='cron',
                trigger='interval',
-               minute=cron_settings.finish_in_progress_tasks['minute'],
-               second=cron_settings.finish_in_progress_tasks['second'],
-               timezone=cron_settings.finish_in_progress_tasks['timezone']
+               minutes=cron_settings.finish_in_progress_tasks['minute'],
+               # second=cron_settings.finish_in_progress_tasks['second'],
+               # timezone=cron_settings.finish_in_progress_tasks['timezone']
                )
     await jobs(job,
                abort_old_tasks,
                args=(S3MultipartUpload, redis.redis),
                # trigger='cron',
                trigger='interval',
-               minute=cron_settings.abort_old_tasks['minute'],
-               second=cron_settings.abort_old_tasks['second'],
-               timezone=cron_settings.abort_old_tasks['timezone']
+               minutes=cron_settings.abort_old_tasks['minute'],
+               # second=cron_settings.abort_old_tasks['second'],
+               # timezone=cron_settings.abort_old_tasks['timezone']
                )
     job.start()
     logging.info(f'List of scheduled jobs: {job.get_jobs()}')

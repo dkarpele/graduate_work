@@ -2,7 +2,7 @@ version: "3"
 
 services:
   fastapi-cdn-api:
-    build: ./cdn_api_async/src/
+    build: ./cdn_api_async_redis/src/
     env_file:
       - .env
     networks:

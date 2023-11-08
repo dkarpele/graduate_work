@@ -112,7 +112,8 @@ async def object_status(
     object_api = await cache.get_from_cache_by_key(key)
 
     if object_api:
-        return (f"'{object_name}' has status '{object_api[b'status']}' "
+        return (f"'{object_name}' has status "
+                f"'{str(object_api[b'status'], 'utf-8')}' "
                 f"on node '{endpoint}'")
     else:
         raise HTTPException(

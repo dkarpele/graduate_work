@@ -1,9 +1,10 @@
 import logging
 
 from fastapi import HTTPException, status
+from typing import Type
 
-from db import AbstractStorage
-from models.model import Node
+from db import AbstractStorage, AbstractCache
+from models.model import Node, Model
 
 credentials_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -38,27 +39,25 @@ async def entity_doesnt_exist(err: Exception) -> HTTPException:
     )
 
 
-async def object_already_uploaded(storage: AbstractStorage,
+async def object_already_uploaded(cache: AbstractCache,
                                   node: Node,
                                   object_: str,
                                   collection: str) -> None:
     endpoint = 'http://' + node.endpoint
-    query = {'object_name': object_,
-             'node': endpoint,
-             'status': 'finished'}
-    projection = {'object_name': 1}
-    res = await storage.get_data(query=query,
-                                 collection=collection,
-                                 projection=projection
-                                 )
-    if res:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{object_} was already successfully uploaded to"
-                   f" {endpoint}. If you want to upload an object with the "
-                   f"same name, you need to remove the old one first.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    key: str = f"{collection}^{object_}^{endpoint}"
+
+    res = await cache.get_from_cache_by_key(key)
+    try:
+        if str(res[b'status'], 'utf-8') == 'finished':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{object_} was already successfully uploaded to"
+                       f" {endpoint}. If you want to upload an object with the "
+                       f"same name, you need to remove the old one first.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except TypeError:
+        return None
 
 
 too_many_requests = HTTPException(

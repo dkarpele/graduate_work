@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-from typing import Union
 
 from apscheduler.schedulers import SchedulerAlreadyRunningError
 from fastapi import APIRouter, Request, UploadFile, HTTPException, status
@@ -14,9 +13,9 @@ from helpers.exceptions import object_not_exist, object_already_uploaded
 from helpers.helper_async import (get_active_nodes, find_closest_node,
                                   object_exists, origin_is_alive, get_mpu_id,
                                   is_scheduler_in_progress)
-from services.service import multipart_upload
+from services.redis import CacheDep
 from services.scheduler import copy_object_to_node
-from services.mongo import MongoDep
+from services.service import multipart_upload
 
 router = APIRouter()
 
@@ -28,7 +27,7 @@ router = APIRouter()
 async def object_url(
         request: Request,
         object_name: str,
-        mongo: MongoDep
+        cache: CacheDep
 ) -> RedirectResponse:
     client_host = request.client.host
     client_host = "137.0.0.1"
@@ -68,13 +67,13 @@ async def object_url(
         secret_key = origin_node.secret_access_key
 
         # Copy object to closest_node using Scheduler
-        storage_data = (mongo, closest_node, object_name, "cdn")
+        storage_data = (cache, closest_node, object_name, "cdn")
         if not await is_scheduler_in_progress(*storage_data):
             job = await get_scheduler()
             await jobs(job,
                        copy_object_to_node,
                        args=(AWSS3, object_name, origin_node, closest_node,
-                             mongo, "in_progress"),
+                             cache, "in_progress"),
                        next_run_time=datetime.now())
             try:
                 job.start()
@@ -104,24 +103,18 @@ async def object_url(
             )
 async def object_status(
         object_name: str,
-        mongo: MongoDep
-) -> list | HTTPException:
-    query = {"object_name": object_name}
-    projection = {"status": 1,
-                  "node": 1}
-    object_api = await mongo.get_data(query, "api", projection)
-    res = []
+        cache: CacheDep
+) -> str | HTTPException:
+    active_nodes = await get_active_nodes()
+    origin_node = await origin_is_alive(active_nodes)
+    endpoint = 'http://' + origin_node.endpoint
+    key: str = f"api^{object_name}^{endpoint}"
+
+    object_api = await cache.get_from_cache_by_key(key)
+
     if object_api:
-        res.append(f"'{object_name}' has status '{object_api[0]['status']}' on"
-                   f" node '{object_api[0]['node']}'")
-
-    object_cdn = await mongo.get_data(query, "cdn", projection)
-    if object_cdn:
-        res.append(f"'{object_name}' has status '{object_cdn[0]['status']}' on"
-                   f" node '{object_cdn[0]['node']}'")
-
-    if res:
-        return res
+        return (f"'{object_name}' has status '{object_api[b'status']}' "
+                f"on node '{endpoint}'")
     else:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -136,13 +129,13 @@ async def object_status(
              )
 async def upload_object(
         file_upload: UploadFile,
-        mongo: MongoDep
+        cache: CacheDep
 ) -> str | HTTPException:
     active_nodes = await get_active_nodes()
     origin_node = await origin_is_alive(active_nodes)
     filename = file_upload.filename
 
-    await object_already_uploaded(mongo,
+    await object_already_uploaded(cache,
                                   origin_node,
                                   filename,
                                   collection="api")
@@ -161,9 +154,9 @@ async def upload_object(
         total_bytes=file_upload.size,
         **origin_client_dict)
 
-    mpu_id = await get_mpu_id(endpoint, filename, mongo)
+    mpu_id = await get_mpu_id(endpoint, filename, cache)
 
-    if await multipart_upload(mongo,
+    if await multipart_upload(cache,
                               origin_client,
                               status="in_progress",
                               object_=file_upload,
@@ -183,20 +176,35 @@ async def upload_object(
                )
 async def delete_object(
         object_name: str,
-        mongo: MongoDep
-) -> Union[str | HTTPException]:
+        cache: CacheDep
+) -> str | HTTPException:
     active_nodes = await get_active_nodes()
 
     endpoints = []
     for node in active_nodes.values():
+        object_ = await object_exists(MinioS3,
+                                      settings.bucket_name,
+                                      object_name,
+                                      node)
+        if not object_:
+            logging.info(f"{object_name} doesn't exist on {node.endpoint}")
+            continue
         client = MinioS3(endpoint=node.endpoint,
                          access_key=node.access_key_id,
                          secret_key=node.secret_access_key,
                          secure=False)
         await client.remove_object(settings.bucket_name,
                                    object_name)
-        endpoints.append(node.endpoint)
-    document = {"object_name": object_name}
-    await mongo.delete_data(document, "api")
-    await mongo.delete_data(document, "cdn")
+        endpoint = 'http://' + node.endpoint
+        endpoints.append(endpoint)
+        key_api = f"api^{object_name}^{endpoint}"
+        key_cdn = f"cdn^{object_name}^{endpoint}"
+        await cache.delete_from_cache_by_id(key_api)
+        await cache.delete_from_cache_by_id(key_cdn)
+    if not endpoints:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{object_name} doesn't exist on all nodes!",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return f"{object_name} was removed from nodes {endpoints}"

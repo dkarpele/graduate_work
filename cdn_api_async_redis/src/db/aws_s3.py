@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from typing import Any
 
+from botocore.exceptions import ClientError
 from aioboto3 import Session
 from aiofiles import open
 from fastapi import HTTPException, status
@@ -10,7 +11,7 @@ from miniopy_async import S3Error
 from miniopy_async.datatypes import Object
 
 from core.config import settings
-from db import AbstractS3
+from db import AbstractS3, AbstractCache
 from db import AbstractStorage
 
 
@@ -98,7 +99,7 @@ class S3MultipartUpload(AWSS3):
 
     def __init__(self,
                  bucket: str,
-                 key: str,
+                 key: str | None = None,
                  local_path: str | None = None,
                  content_type: str | None = None,
                  total_bytes: int = 0,
@@ -116,8 +117,15 @@ class S3MultipartUpload(AWSS3):
         self.part_bytes = part_size
         assert part_size > self.PART_MINIMUM
 
+    async def list_multipart_uploads(self, s3) -> dict:
+        try:
+            return await s3.list_multipart_uploads(Bucket=self.bucket)
+        except ClientError as e:
+            logging.info(e)
+            return {}
+
     async def abort_all(self, s3):
-        mpus = await s3.list_multipart_uploads(Bucket=self.bucket)
+        mpus = await self.list_multipart_uploads(s3)
         aborted = []
         if "Uploads" in mpus:
             logging.info(f"Aborting {len(mpus['Uploads'])} uploads")
@@ -193,7 +201,7 @@ class S3MultipartUpload(AWSS3):
     async def upload_bytes(self,
                            s3,
                            mpu_id: str,
-                           storage: AbstractStorage,
+                           cache: AbstractCache,
                            status_: str,
                            parts: list | None = None,
                            origin_client: AbstractS3 | None = None,
@@ -204,8 +212,6 @@ class S3MultipartUpload(AWSS3):
 
         object_name = self.key
         endpoint = self.endpoint
-        query = {"object_name": object_name,
-                 "node": endpoint}
 
         if parts is None:
             parts = []
@@ -264,19 +270,17 @@ class S3MultipartUpload(AWSS3):
                                                 self.total_bytes)}%""")
                 parts.append({"PartNumber": part_number, "ETag": part["ETag"]})
 
-            # Uploading intermediate data to MongoDB
-            update = {"object_name": object_name,
-                      "node": endpoint,
-                      "mpu_id": mpu_id,
-                      "part_number": part_number,
+            # Uploading intermediate data to the cache
+
+            key = f"{collection}^{object_name}^{endpoint}"
+            entity = {"mpu_id": mpu_id,
                       "Etag": part["ETag"],
-                      "uploaded": uploaded_bytes,
+                      "part_number": part_number,
                       "size": self.total_bytes,
-                      "last_modified": datetime.utcnow(),
+                      "uploaded": uploaded_bytes,
+                      "last_modified": str(datetime.utcnow()),
                       "status": status_}
-            await storage.update_data(query=query,
-                                      update=update,
-                                      collection=collection)
+            await cache.put_to_cache_by_key(key, entity)
             logging.info(f"Uploading intermediate data to storage for object: "
                          f"'{object_name}' with mpu_id: '{mpu_id}', "
                          f"part_number: '{part_number}, "

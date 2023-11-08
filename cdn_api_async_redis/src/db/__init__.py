@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, AsyncIterator
 
 from miniopy_async.datatypes import Object
 from pymongo.results import DeleteResult
@@ -163,9 +163,8 @@ class AbstractCache(ABC):
 
     @abstractmethod
     async def get_from_cache_by_key(self,
-                                    model,
                                     key: str = None,
-                                    sort: str = None) -> list | None:
+                                    sort: str = None) -> dict | None:
         """
         Абстрактный асинхронный метод для получения данных по ключу из кэша
         :param model: тип модели, в котором возвращаются данные
@@ -178,12 +177,17 @@ class AbstractCache(ABC):
     @abstractmethod
     async def put_to_cache_by_key(self,
                                   key: str = None,
-                                  entities: list = None):
+                                  entities: dict = None):
         """
         Абстрактный асинхронный метод, который кладет данные в кэш по ключу
         :param key: по данному ключу записываются данные в кэш
         :param entities: данные, которые кладем в кэш
         """
+        ...
+
+    @abstractmethod
+    async def scan_iter(self,
+                        pattern: str = None, ):
         ...
 
     @abstractmethod

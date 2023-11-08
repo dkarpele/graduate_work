@@ -1,3 +1,5 @@
+Link to the project https://github.com/dkarpele/graduate_work
+
 # Graduate work
 
 ### Installation

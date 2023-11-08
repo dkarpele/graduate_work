@@ -128,7 +128,7 @@ async def finish_in_progress_tasks(client: Type[AWSS3],
 
 async def abort_old_tasks(client: Type[S3MultipartUpload],
                           cache: AbstractCache, ):
-    key_pattern = "^*^"
+    key_pattern = "*^*^"
     await get_cached_values(cache,
                             client,
                             key_pattern,
@@ -145,12 +145,12 @@ async def get_cached_values(cache: AbstractCache,
 
     for node in active_nodes.values():
         endpoint = 'http://' + node.endpoint
-        key_pattern += endpoint
-        async for key in await cache.scan_iter(key_pattern):
+        key_ = key_pattern + endpoint
+        async for key in await cache.scan_iter(key_):
             if not key:
                 logging.info(
-                    f"No in progress objects from {time_now} for "
-                    f"{endpoint}. Everything good.")
+                    f"No in progress objects for "
+                    f"{endpoint}. Everything is good.")
             else:
                 obj = await cache.get_from_cache_by_key(key)
                 key = str(key, 'utf-8')

@@ -25,8 +25,8 @@ async def startup():
     await jobs(job,
                finish_in_progress_tasks,
                args=(AWSS3, redis.redis),
-               trigger='cron',
-               # trigger='interval',
+               # trigger='cron',
+               trigger='interval',
                minute=cron_settings.finish_in_progress_tasks['minute'],
                second=cron_settings.finish_in_progress_tasks['second'],
                timezone=cron_settings.finish_in_progress_tasks['timezone']
@@ -34,8 +34,8 @@ async def startup():
     await jobs(job,
                abort_old_tasks,
                args=(S3MultipartUpload, redis.redis),
-               trigger='cron',
-               # trigger='interval',
+               # trigger='cron',
+               trigger='interval',
                minute=cron_settings.abort_old_tasks['minute'],
                second=cron_settings.abort_old_tasks['second'],
                timezone=cron_settings.abort_old_tasks['timezone']

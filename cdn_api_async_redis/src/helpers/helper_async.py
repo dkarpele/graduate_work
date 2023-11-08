@@ -158,23 +158,6 @@ async def is_scheduler_in_progress(cache: AbstractCache,
         return None
 
 
-async def get_in_progress_objects(cache: AbstractCache,
-                                  collection: str,
-                                  threshold: dict) -> list:
-    query = {'$or': [{'status': 'in_progress'},
-                     {'status': 'scheduler_in_progress'}
-                     ],
-             'last_modified': threshold
-             }
-    projection = {'object_name': 1,
-                  'node': 1, }
-    res = await cache.get_data(query=query,
-                               collection=collection,
-                               projection=projection,
-                               )
-    return res
-
-
 async def main():
     print(await find_closest_node('137.0.0.1',
                                   await get_active_nodes(

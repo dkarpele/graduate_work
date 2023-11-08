@@ -2,7 +2,6 @@ from typing import Optional
 
 from redis.asyncio import Redis as AsyncRedis
 
-from core.config import settings
 from db import AbstractCache
 
 

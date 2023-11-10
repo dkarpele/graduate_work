@@ -15,54 +15,6 @@ from models.model import Node
 from services.service import multipart_upload
 
 
-async def copy_object_file_to_node(client: Type[AbstractS3],
-                                   object_name: str,
-                                   origin_node: Node,
-                                   edge_node: Node) -> None:
-    result = False
-    origin_client: AbstractS3 = client(
-        endpoint='http://' + origin_node.endpoint,
-        aws_access_key_id=origin_node.access_key_id,
-        aws_secret_access_key=origin_node.secret_access_key,
-        verify=False)
-
-    dir_name = f'/tmp/{datetime.now().isoformat()}'
-    try:
-        await os.makedirs(dir_name, exist_ok=True)
-        file_path = f'{dir_name}/{object_name}'
-        await origin_client.fget_object(
-            settings.bucket_name,
-            object_name,
-            file_path)
-
-        edge_client_dict = {
-            'endpoint': 'http://' + edge_node.endpoint,
-            'aws_access_key_id': edge_node.access_key_id,
-            'aws_secret_access_key': edge_node.secret_access_key,
-            'verify': False}
-        content_type = magic.from_file(file_path,
-                                       mime=True)
-        edge_client = S3MultipartUpload(settings.bucket_name,
-                                        object_name,
-                                        file_path,
-                                        content_type,
-                                        **edge_client_dict)
-        async with edge_client.client as s3:
-            await edge_client.abort_all(s3)
-            # create new multipart upload
-            mpu_id = await edge_client.create(s3)
-            logging.info(f"Starting upload with id={mpu_id}")
-            # upload parts
-            parts = await edge_client.upload_file(s3, mpu_id)
-            result = await edge_client.complete(s3, mpu_id, parts)
-            logging.info(result)
-
-    finally:
-        if result:
-            await rmtree(dir_name, ignore_errors=True)
-        logging.info(f"Removing temp dir {dir_name}")
-
-
 async def copy_object_to_node(client: Type[AbstractS3],
                               object_name: str,
                               origin_node: Node,

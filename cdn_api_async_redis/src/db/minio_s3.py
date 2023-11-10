@@ -24,6 +24,7 @@ class MinioS3(AbstractS3):
                 bucket_name=bucket_name,
                 object_name=object_name,
                 expires=timedelta(hours=1))
+            logging.info(f'{url}')
             return url
         except S3Error as exc:
             print("S3 error occurred.", exc)

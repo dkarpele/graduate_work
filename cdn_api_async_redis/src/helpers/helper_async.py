@@ -60,14 +60,18 @@ async def find_closest_node(user_ip: str,
     """
     async with ClientSession() as session:
         try:
-            url_ip_location = (f"https://ipapi.co/{user_ip}/json/"
-                               f"?key={settings.ipapi_key}")
+            if settings.ipapi_key:
+                url_ip_location = f"https://ipapi.co/{user_ip}/json/"\
+                                  f"?key={settings.ipapi_key}"
+            else:
+                url_ip_location = f"https://ipapi.co/{user_ip}/json/"
             async with session.get(url_ip_location) as response:
                 res = await response.json()
                 try:
                     user_coordinates = (float(res['latitude']),
                                         float(res['longitude'])
                                         )
+                    logging.info(f"user coordinates: {user_coordinates}")
                 except KeyError:
                     logging.error(f"'{user_ip}' not found in the database.")
                     return False
@@ -161,7 +165,7 @@ async def is_scheduler_in_progress(cache: AbstractCache,
 async def main():
     print(await find_closest_node('137.0.0.1',
                                   await get_active_nodes(
-                                      "../../../.env.minio.json")))
+                                      "../.env.minio.json")))
 
 
 if __name__ == "__main__":

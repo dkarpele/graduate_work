@@ -1,13 +1,12 @@
-Link to the project https://github.com/dkarpele/graduate_work
-
 # Graduate work
 
 ### Installation
 
 1. Clone [repo](https://github.com/dkarpele/graduate_work).
 2. Create ```.env``` file according to ```.env.example```.
-3. Create ```.env.minio.json``` file according to ```.env.minio.json.example```.
+3. Copy ```.env.minio.json.example``` as ```cdn_api_async_redis/src/.env.minio.json```
 4. Launch the project ```docker-compose up --build```.
+5. Login to every Minio node and create a bucket (not automated yet)
 
 
 #### [architecture](architecture)

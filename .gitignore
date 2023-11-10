@@ -1,6 +1,2 @@
 /.env
-/.env.minio.json
-/cdn_api/src/.env
-/cdn_api/src/.env.minio.json
-/cdn_api_sync/src/.env
-/cdn_api_sync/src/.env.minio.json
+/cdn_api_async_redis/src/.env.minio.json

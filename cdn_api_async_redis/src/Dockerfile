@@ -6,12 +6,11 @@ ENV PYTHONUNBUFFERED 1
 WORKDIR /app
 
 COPY requirements.txt requirements.txt
-COPY entrypoint.sh entrypoint.sh
 
 RUN pip install --upgrade pip \
     && pip install -r /app/requirements.txt
 
 COPY . ./src
 
-CMD ["/bin/sh", "-c", "pwd; cd src ; ls ; \
+CMD ["/bin/sh", "-c", "cd src ; \
 gunicorn -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:8000"]

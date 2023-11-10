@@ -30,7 +30,8 @@ async def object_url(
         cache: CacheDep
 ) -> RedirectResponse:
     client_host = request.client.host
-    client_host = "137.0.0.1"
+    # Stub to test CDN on localhost
+    # client_host = "137.0.0.1"
     active_nodes = await get_active_nodes()
     closest_node = await find_closest_node(client_host,
                                            active_nodes)

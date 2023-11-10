@@ -2,8 +2,8 @@ import logging
 
 from fastapi import HTTPException, status
 
-from db import AbstractCache
-from models.model import Node
+from db.abstract import AbstractCache
+from models.model import Node, Status
 
 
 async def object_already_uploaded(cache: AbstractCache,
@@ -15,7 +15,7 @@ async def object_already_uploaded(cache: AbstractCache,
 
     res = await cache.get_from_cache_by_key(key)
     try:
-        if str(res[b'status'], 'utf-8') == 'finished':
+        if str(res[b'status'], 'utf-8') == Status.FINISHED.value:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"{object_} was already successfully uploaded to"

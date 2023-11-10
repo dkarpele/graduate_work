@@ -7,11 +7,11 @@ from aiofiles import os
 from aioshutil import rmtree
 
 from core.config import settings
-from db import AbstractS3, AbstractCache
+from db.abstract import AbstractS3, AbstractCache
 from db.aws_s3 import S3MultipartUpload, AWSS3
 from helpers.exceptions import object_already_uploaded
 from helpers.helper_async import get_mpu_id, get_active_nodes, origin_is_alive
-from models.model import Node
+from models.model import Node, Status
 from services.service import multipart_upload
 
 
@@ -98,7 +98,7 @@ async def get_cached_values(cache: AbstractCache,
     for node in active_nodes.values():
         endpoint = 'http://' + node.endpoint
         key_ = key_pattern + endpoint
-        async for key in await cache.scan_iter(key_):
+        async for key in await cache.get_keys_by_pattern(key_):
             if not key:
                 logging.info(
                     f"No in progress objects for "
@@ -113,8 +113,9 @@ async def get_cached_values(cache: AbstractCache,
                 comparing = last_modified > time_now \
                     if finish \
                     else last_modified < time_now
-                if str(obj[b'status'], 'utf-8') in ('in_progress',
-                                                    'scheduler_in_progress') \
+                if str(obj[b'status'], 'utf-8') in (
+                        Status.IN_PROGRESS.value,
+                        Status.SCHEDULER_IN_PROGRESS.value) \
                         and comparing:
                     if finish:
                         await copy_object_to_node(client,
@@ -122,7 +123,7 @@ async def get_cached_values(cache: AbstractCache,
                                                   origin_node,
                                                   node,
                                                   cache,
-                                                  "scheduler_in_progress")
+                                                  Status.SCHEDULER_IN_PROGRESS.value)
                     else:
                         client_dict = {
                             'endpoint': endpoint,

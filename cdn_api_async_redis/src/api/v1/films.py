@@ -13,6 +13,7 @@ from helpers.exceptions import object_not_exist, object_already_uploaded
 from helpers.helper_async import (get_active_nodes, find_closest_node,
                                   object_exists, origin_is_alive, get_mpu_id,
                                   is_scheduler_in_progress)
+from models.model import Status
 from services.redis import CacheDep
 from services.scheduler import copy_object_to_node
 from services.service import multipart_upload
@@ -31,7 +32,7 @@ async def object_url(
 ) -> RedirectResponse:
     client_host = request.client.host
     # Stub to test CDN on localhost
-    # client_host = "137.0.0.1"
+    client_host = "137.0.0.1"
     active_nodes = await get_active_nodes()
     closest_node = await find_closest_node(client_host,
                                            active_nodes)
@@ -74,7 +75,7 @@ async def object_url(
             await jobs(job,
                        copy_object_to_node,
                        args=(AWSS3, object_name, origin_node, closest_node,
-                             cache, "in_progress"),
+                             cache, Status.IN_PROGRESS.value),
                        next_run_time=datetime.now())
             try:
                 job.start()
@@ -159,7 +160,7 @@ async def upload_object(
 
     if await multipart_upload(cache,
                               origin_client,
-                              status="in_progress",
+                              status=Status.IN_PROGRESS.value,
                               object_=file_upload,
                               mpu_id=mpu_id):
         return f"Upload {filename} completed successfully."

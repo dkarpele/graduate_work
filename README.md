@@ -15,14 +15,14 @@ Architecture for the CDN service described here.
 
 #### [CDN](cdn_api_async_redis)
 
-We use MinIO as a S3 and redis as a cache. 
+We use MinIO as an S3 and redis as a cache. 
 
 **API**
 
 - GET http://127.0.0.1/api/v1/films/{object_name} - Get URL to preview object (movie, music, photo). Redirects to url to preview object
 - GET http://127.0.0.1/api/v1/films/{object_name}/status - Get status of the object uploading to S3
-- POST http://127.0.0.1/api/v1/films/upload_object - upload object to storage
-- DELETE http://127.0.0.1/api/v1/films/delete_object - delete object from alll nodes
+- POST http://127.0.0.1/api/v1/films/object - upload object to storage
+- DELETE http://127.0.0.1/api/v1/films/object - delete object from alll nodes
 
 **Scheduler**
 
@@ -34,6 +34,7 @@ We use MinIO as a S3 and redis as a cache.
 After every action the transition status in the database changes:
 
 in_progress -> finished.
-
+scheduler_in_progress -> finished.
+- scheduler_in_progress - scheduler is uploading file to S3 now
 - in_progress - part of the file was uploaded to S3
 - finished - upload finished

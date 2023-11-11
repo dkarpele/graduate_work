@@ -2,7 +2,7 @@ from typing import Optional
 
 from redis.asyncio import Redis as AsyncRedis
 
-from db import AbstractCache
+from db.abstract import AbstractCache
 
 
 class Redis(AbstractCache):
@@ -48,8 +48,8 @@ class Redis(AbstractCache):
     async def create_pipeline(self):
         return self.session.pipeline()
 
-    async def scan_iter(self,
-                        pattern: str = None, ):
+    async def get_keys_by_pattern(self,
+                                  pattern: str = None,):
         data = self.session.scan_iter(pattern)
         return data
 

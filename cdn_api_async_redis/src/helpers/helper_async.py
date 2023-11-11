@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 from geopy.distance import distance
 
 from core.config import settings
-from db import AbstractS3, AbstractCache
+from db.abstract import AbstractS3, AbstractCache
 from helpers.exceptions import locations_not_available
-from models.model import Node
+from models.model import Node, Status
 
 load_dotenv()
 
@@ -35,10 +35,10 @@ async def get_active_nodes(
         raise FileNotFoundError
     except JSONDecodeError as e:
         logging.error(e)
-    except AttributeError:
-        logging.error('Attribute Error!!!')
-    except IOError:
-        logging.error('IOError!!!')
+    except AttributeError as e:
+        logging.error(e)
+    except IOError as e:
+        logging.error(e)
 
 
 async def origin_is_alive(nodes: dict[str, Node]):
@@ -139,7 +139,7 @@ async def get_mpu_id(endpoint: str,
 
     res = await cache.get_from_cache_by_key(key)
     try:
-        if str(res[b'status'], 'utf-8') == 'in_progress':
+        if str(res[b'status'], 'utf-8') == Status.IN_PROGRESS.value:
             return str(res[b'mpu_id'], 'utf-8')
     except TypeError:
         return None
@@ -154,7 +154,7 @@ async def is_scheduler_in_progress(cache: AbstractCache,
 
     res = await cache.get_from_cache_by_key(key)
     try:
-        if str(res[b'status'], 'utf-8') == 'scheduler_in_progress':
+        if str(res[b'status'], 'utf-8') == Status.SCHEDULER_IN_PROGRESS.value:
             return res
         else:
             return None

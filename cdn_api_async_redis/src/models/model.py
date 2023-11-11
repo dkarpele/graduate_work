@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from dataclasses import dataclass
 
 import orjson
@@ -19,15 +20,6 @@ class Model(BaseModel):
         allow_population_by_field_name = True
 
 
-class ObjectUpload(Model):
-    mpu_id: str
-    etag: str
-    part_number: int
-    size: int
-    uploaded: int
-    last_modified: datetime = Field(default_factory=datetime.utcnow)
-
-
 @dataclass
 class Node:
     endpoint: str
@@ -38,3 +30,9 @@ class Node:
     latitude: float
     longitude: float
     is_active: str
+
+
+class Status(Enum):
+    FINISHED = 'finished'
+    IN_PROGRESS = 'in_progress'
+    SCHEDULER_IN_PROGRESS = 'scheduler_in_progress'

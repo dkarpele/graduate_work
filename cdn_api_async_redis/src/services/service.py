@@ -3,8 +3,9 @@ from datetime import datetime
 
 from fastapi import UploadFile
 
-from db import AbstractS3, AbstractCache
+from db.abstract import AbstractS3, AbstractCache
 from db.aws_s3 import S3MultipartUpload
+from models.model import Status
 
 
 class CDNService:
@@ -65,9 +66,9 @@ async def multipart_upload(cache: AbstractCache,
         # Complete object upload
         res = await upload_client.complete(s3, mpu_id, parts)
 
-    # Uploading finished status to MongoDB
+    # Uploading finished status to cache
     object_name = upload_client.key
-    status_ = "finished"
+    status_ = Status.FINISHED.value
     key = f"{collection}^{object_name}^{upload_client.endpoint}"
     entity = {"last_modified": str(datetime.utcnow()),
               "status": status_}

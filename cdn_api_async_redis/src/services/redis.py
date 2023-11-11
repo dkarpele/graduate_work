@@ -2,7 +2,8 @@ from datetime import datetime
 from functools import lru_cache
 from typing import Annotated
 
-from db.redis import Redis, get_redis, AbstractCache
+from db.redis import Redis, get_redis
+from db.abstract import AbstractCache
 from fastapi import Depends, Request
 
 from services.backoff import backoff

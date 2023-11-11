@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from geopy.distance import distance
 
 from core.config import settings
-from db.abstract import AbstractS3, AbstractCache
+from connectors.abstract import AbstractS3, AbstractCache
 from helpers.exceptions import locations_not_available
 from models.model import Node, Status
 

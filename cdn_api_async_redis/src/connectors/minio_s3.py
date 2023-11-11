@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from miniopy_async.datatypes import Object
 from miniopy_async import Minio, S3Error
 
-from db.abstract import AbstractS3
+from connectors.abstract import AbstractS3
 
 
 class MinioS3(AbstractS3):

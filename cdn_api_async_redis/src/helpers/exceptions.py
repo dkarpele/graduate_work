@@ -2,7 +2,7 @@ import logging
 
 from fastapi import HTTPException, status
 
-from db.abstract import AbstractCache
+from connectors.abstract import AbstractCache
 from models.model import Node, Status
 
 

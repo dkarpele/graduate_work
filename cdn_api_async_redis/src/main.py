@@ -6,13 +6,11 @@ from fastapi import FastAPI, Depends
 from fastapi.responses import ORJSONResponse
 
 from api.v1 import films
-from core.config import settings, cron_settings
+from core.config import settings
 from core.logger import LOGGING
 from db import redis
-from db.aws_s3 import AWSS3, S3MultipartUpload
-from db.scheduler import jobs, get_scheduler
+from db.scheduler import get_scheduler, add_startup_jobs
 from services.redis import rate_limit
-from services.scheduler import finish_in_progress_tasks, abort_old_tasks
 
 
 async def startup():
@@ -21,32 +19,15 @@ async def startup():
                               ssl=False)
 
     # Connecting to scheduler
-    job = await get_scheduler()
-    await jobs(job,
-               finish_in_progress_tasks,
-               args=(AWSS3, redis.redis),
-               # trigger='cron',
-               trigger='interval',
-               minutes=cron_settings.finish_in_progress_tasks['minute'],
-               # second=cron_settings.finish_in_progress_tasks['second'],
-               # timezone=cron_settings.finish_in_progress_tasks['timezone']
-               )
-    await jobs(job,
-               abort_old_tasks,
-               args=(S3MultipartUpload, redis.redis),
-               # trigger='cron',
-               trigger='interval',
-               minutes=cron_settings.abort_old_tasks['minute'],
-               # second=cron_settings.abort_old_tasks['second'],
-               # timezone=cron_settings.abort_old_tasks['timezone']
-               )
-    job.start()
-    logging.info(f'List of scheduled jobs: {job.get_jobs()}')
+    scheduler = await get_scheduler()
+    await add_startup_jobs(scheduler, redis.redis)
+    scheduler.start()
+    logging.info(f'List of scheduled jobs: {scheduler.get_jobs()}')
 
 
 async def shutdown():
-    job = await get_scheduler()
-    job.shutdown()
+    scheduler = await get_scheduler()
+    scheduler.shutdown()
 
 
 @asynccontextmanager

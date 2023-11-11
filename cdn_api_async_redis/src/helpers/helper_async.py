@@ -61,7 +61,7 @@ async def find_closest_node(user_ip: str,
     async with ClientSession() as session:
         try:
             if settings.ipapi_key:
-                url_ip_location = f"https://ipapi.co/{user_ip}/json/"\
+                url_ip_location = f"https://ipapi.co/{user_ip}/json/" \
                                   f"?key={settings.ipapi_key}"
             else:
                 url_ip_location = f"https://ipapi.co/{user_ip}/json/"
@@ -99,10 +99,10 @@ async def find_closest_node(user_ip: str,
     return closest_node
 
 
-async def object_exists(client: Type[AbstractS3],
-                        bucket_name: str,
-                        object_name: str,
-                        node: Node) -> bool:
+async def get_object(client: Type[AbstractS3],
+                     bucket_name: str,
+                     object_name: str,
+                     node: Node) -> bool:
     """
     Check if object exists in the bucket
     :param client: S3 client
@@ -115,10 +115,6 @@ async def object_exists(client: Type[AbstractS3],
                                 access_key=node.access_key_id,
                                 secret_key=node.secret_access_key,
                                 secure=False)
-
-    bucket_found: bool = await client.bucket_exists(bucket_name)
-    if not bucket_found:
-        return False
 
     object_found: Any = await client.get_object(bucket_name,
                                                 object_name,

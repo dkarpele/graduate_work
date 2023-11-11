@@ -34,8 +34,7 @@ class MinioS3(AbstractS3):
 
     async def bucket_exists(self, bucket_name: str) -> bool:
         try:
-            async with aiohttp.ClientSession():
-                return await self.client.bucket_exists(bucket_name)
+            return await self.client.bucket_exists(bucket_name)
         except S3Error as exc:
             logging.error(f"{exc}")
 

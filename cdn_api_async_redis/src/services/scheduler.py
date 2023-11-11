@@ -2,10 +2,6 @@ import logging
 from datetime import datetime, timedelta
 from typing import Type
 
-import magic
-from aiofiles import os
-from aioshutil import rmtree
-
 from core.config import settings
 from db.abstract import AbstractS3, AbstractCache
 from db.aws_s3 import S3MultipartUpload, AWSS3
@@ -72,25 +68,35 @@ async def copy_object_to_node(client: Type[AbstractS3],
 async def finish_in_progress_tasks(client: Type[AWSS3],
                                    cache: AbstractCache, ) -> None:
     key_pattern = "cdn^*^"
-    await get_cached_values(cache,
-                            client,
-                            key_pattern,
-                            True)
+    await process_unfinished_tasks(cache,
+                                   client,
+                                   key_pattern,
+                                   finish=True)
 
 
 async def abort_old_tasks(client: Type[S3MultipartUpload],
                           cache: AbstractCache, ):
     key_pattern = "*^*^"
-    await get_cached_values(cache,
-                            client,
-                            key_pattern,
-                            finish=False)
+    await process_unfinished_tasks(cache,
+                                   client,
+                                   key_pattern,
+                                   finish=False)
 
 
-async def get_cached_values(cache: AbstractCache,
-                            client: Type[AWSS3],
-                            key_pattern: str,
-                            finish: bool = True):
+async def process_unfinished_tasks(cache: AbstractCache,
+                                   client: Type[AWSS3],
+                                   key_pattern: str,
+                                   finish: bool = True) -> None:
+    """
+    Process tasks that are not in "finished" (in process) state. Task can be
+    finished or aborted.
+    :param cache: object cache
+    :param client: S3 client
+    :param key_pattern: Pattern to search a key in cache
+    :param finish: If True - finish uploading from one node to another,
+    if False - abort uploading
+    :return:
+    """
     time_now = datetime.utcnow() - timedelta(hours=6)
     active_nodes = await get_active_nodes()
     origin_node = await origin_is_alive(active_nodes)
@@ -118,12 +124,13 @@ async def get_cached_values(cache: AbstractCache,
                         Status.SCHEDULER_IN_PROGRESS.value) \
                         and comparing:
                     if finish:
-                        await copy_object_to_node(client,
-                                                  object_name,
-                                                  origin_node,
-                                                  node,
-                                                  cache,
-                                                  Status.SCHEDULER_IN_PROGRESS.value)
+                        await copy_object_to_node(
+                            client,
+                            object_name,
+                            origin_node,
+                            node,
+                            cache,
+                            Status.SCHEDULER_IN_PROGRESS.value)
                     else:
                         client_dict = {
                             'endpoint': endpoint,

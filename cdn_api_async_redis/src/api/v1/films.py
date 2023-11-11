@@ -11,7 +11,7 @@ from db.minio_s3 import MinioS3
 from db.scheduler import get_scheduler, jobs
 from helpers.exceptions import object_not_exist, object_already_uploaded
 from helpers.helper_async import (get_active_nodes, find_closest_node,
-                                  object_exists, origin_is_alive, get_mpu_id,
+                                  get_object, origin_is_alive, get_mpu_id,
                                   is_scheduler_in_progress)
 from models.model import Status
 from services.redis import CacheDep
@@ -41,10 +41,10 @@ async def object_url(
         logging.info(f"Use Origin S3 '{closest_node.alias}'")
 
     # Check if object exists in the closest edge location
-    object_ = await object_exists(MinioS3,
-                                  settings.bucket_name,
-                                  object_name,
-                                  closest_node)
+    object_ = await get_object(MinioS3,
+                               settings.bucket_name,
+                               object_name,
+                               closest_node)
 
     endpoint = closest_node.endpoint
     access_key = closest_node.access_key_id
@@ -55,10 +55,10 @@ async def object_url(
         origin_node = await origin_is_alive(active_nodes)
 
         # Object doesn't exist on origin node too
-        if not await object_exists(MinioS3,
-                                   settings.bucket_name,
-                                   object_name,
-                                   origin_node):
+        if not await get_object(MinioS3,
+                                settings.bucket_name,
+                                object_name,
+                                origin_node):
             # Nothing to be copied. Raise exception
             raise await object_not_exist(object_name,
                                          settings.bucket_name)
@@ -184,10 +184,10 @@ async def delete_object(
 
     endpoints = []
     for node in active_nodes.values():
-        object_ = await object_exists(MinioS3,
-                                      settings.bucket_name,
-                                      object_name,
-                                      node)
+        object_ = await get_object(MinioS3,
+                                   settings.bucket_name,
+                                   object_name,
+                                   node)
         if not object_:
             logging.info(f"{object_name} doesn't exist on {node.endpoint}")
             continue

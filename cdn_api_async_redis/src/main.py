@@ -8,8 +8,8 @@ from fastapi.responses import ORJSONResponse
 from api.v1 import films
 from core.config import settings
 from core.logger import LOGGING
-from db import redis
-from db.scheduler import get_scheduler, add_startup_jobs
+from connectors import redis
+from connectors.scheduler import get_scheduler, add_startup_jobs
 from services.redis import rate_limit
 
 
@@ -17,7 +17,6 @@ async def startup():
     redis.redis = redis.Redis(host=settings.redis_host,
                               port=settings.redis_port,
                               ssl=False)
-
     # Connecting to scheduler
     scheduler = await get_scheduler()
     await add_startup_jobs(scheduler, redis.redis)

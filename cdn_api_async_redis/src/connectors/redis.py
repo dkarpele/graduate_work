@@ -2,7 +2,7 @@ from typing import Optional
 
 from redis.asyncio import Redis as AsyncRedis
 
-from db.abstract import AbstractCache
+from connectors.abstract import AbstractCache
 
 
 class Redis(AbstractCache):
@@ -45,7 +45,7 @@ class Redis(AbstractCache):
         # await self.session.expire(name=key,
         #                           time=settings.cache_expire_in_seconds)
 
-    async def create_pipeline(self):
+    async def get_pipeline(self):
         return self.session.pipeline()
 
     async def get_keys_by_pattern(self,

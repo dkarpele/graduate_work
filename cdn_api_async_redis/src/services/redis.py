@@ -1,23 +1,11 @@
 from datetime import datetime
-from functools import lru_cache
-from typing import Annotated
 
-from db.redis import Redis, get_redis
-from db.abstract import AbstractCache
-from fastapi import Depends, Request
+from starlette.requests import Request
 
-from services.backoff import backoff
-from helpers.exceptions import too_many_requests
 from core.config import rl
-
-
-@lru_cache()
-def get_cache_service(
-        redis: Redis = Depends(get_redis)) -> AbstractCache:
-    return redis
-
-
-CacheDep = Annotated[AbstractCache, Depends(get_cache_service)]
+from dependencies.redis import CacheDep
+from helpers.exceptions import too_many_requests
+from services.backoff import backoff
 
 
 @backoff(service='Redis')
@@ -33,7 +21,7 @@ async def rate_limit(request: Request,
     """
     if not rl.is_rate_limit:
         return
-    pipe = await cache.create_pipeline()
+    pipe = await cache.get_pipeline()
     now = datetime.now()
     host = str(request.client)
     key = f'{host}:{now.minute}'

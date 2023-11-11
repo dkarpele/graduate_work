@@ -3,18 +3,9 @@ from datetime import datetime
 
 from fastapi import UploadFile
 
-from db.abstract import AbstractS3, AbstractCache
-from db.aws_s3 import S3MultipartUpload
+from connectors.abstract import AbstractS3, AbstractCache
+from connectors.aws_s3 import S3MultipartUpload
 from models.model import Status
-
-
-class CDNService:
-    def __init__(self, s3: AbstractS3):
-        self.s3 = s3
-
-    def download(self, bucket_name, object_name):
-        self.s3.get_url(bucket_name=bucket_name,
-                        object_name=object_name)
 
 
 async def multipart_upload(cache: AbstractCache,
@@ -44,10 +35,6 @@ async def multipart_upload(cache: AbstractCache,
                 collection=collection,
                 )
         else:
-            # abort all multipart uploads for this bucket (optional,
-            # for starting over)
-            # await upload_client.abort_all(s3)
-
             # create new multipart upload
             mpu_id = await upload_client.create(s3)
             logging.info(f"Starting upload with id={mpu_id}")

@@ -193,3 +193,11 @@ class AbstractCache(ABC):
         :return: AsyncIterator with keys
         """
         ...
+
+    @abstractmethod
+    async def get_pipeline(self):
+        """
+        Creates pipeline
+        :return:
+        """
+        ...

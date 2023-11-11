@@ -6,7 +6,7 @@
 2. Create ```.env``` file according to ```.env.example```.
 3. Copy ```.env.minio.json.example``` as ```cdn_api_async_redis/src/.env.minio.json```
 4. Launch the project ```docker-compose up --build```.
-5. Login to every Minio node and create a bucket (not automated yet)
+5. Login to every Minio node and create a bucket `BUCKET_NAME` (not automated yet)
 
 
 #### [architecture](architecture)

@@ -11,7 +11,7 @@ from miniopy_async import S3Error
 from miniopy_async.datatypes import Object
 
 from core.config import settings
-from db.abstract import AbstractS3, AbstractCache
+from connectors.abstract import AbstractS3, AbstractCache
 
 
 class AWSS3(AbstractS3):

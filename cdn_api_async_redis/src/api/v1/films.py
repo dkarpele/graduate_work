@@ -1,21 +1,16 @@
 import logging
-from datetime import datetime
 
-from apscheduler.schedulers import SchedulerAlreadyRunningError
 from fastapi import APIRouter, Request, UploadFile, HTTPException, status
 from fastapi.responses import RedirectResponse
 
 from core.config import settings
-from db.aws_s3 import S3MultipartUpload, AWSS3
-from db.minio_s3 import MinioS3
-from db.scheduler import get_scheduler, jobs
-from helpers.exceptions import object_not_exist, object_already_uploaded
 from helpers.helper_async import (get_active_nodes, find_closest_node,
-                                  get_object, origin_is_alive, get_mpu_id,
-                                  is_scheduler_in_progress)
+                                  origin_is_alive, get_mpu_id)
 from models.model import Status
-from services.redis import CacheDep
-from services.scheduler import copy_object_to_node
+from dependencies.redis import CacheDep
+from dependencies.scheduler import SchedulerDep
+from services.films import get_client_data, get_multipart_upload_client_data, \
+    process_deleting_object
 from services.service import multipart_upload
 
 router = APIRouter()
@@ -28,11 +23,12 @@ router = APIRouter()
 async def object_url(
         request: Request,
         object_name: str,
-        cache: CacheDep
+        cache: CacheDep,
+        scheduler: SchedulerDep
 ) -> RedirectResponse:
     client_host = request.client.host
     # Stub to test CDN on localhost
-    client_host = "137.0.0.1"
+    # client_host = "137.0.0.1"
     active_nodes = await get_active_nodes()
     closest_node = await find_closest_node(client_host,
                                            active_nodes)
@@ -40,57 +36,11 @@ async def object_url(
         closest_node = active_nodes['ORIGIN']
         logging.info(f"Use Origin S3 '{closest_node.alias}'")
 
-    # Check if object exists in the closest edge location
-    object_ = await get_object(MinioS3,
-                               settings.bucket_name,
-                               object_name,
-                               closest_node)
-
-    endpoint = closest_node.endpoint
-    access_key = closest_node.access_key_id
-    secret_key = closest_node.secret_access_key
-
-    # object doesn't exist on edge location
-    if not object_ and closest_node.alias != 'origin':
-        origin_node = await origin_is_alive(active_nodes)
-
-        # Object doesn't exist on origin node too
-        if not await get_object(MinioS3,
-                                settings.bucket_name,
-                                object_name,
-                                origin_node):
-            # Nothing to be copied. Raise exception
-            raise await object_not_exist(object_name,
-                                         settings.bucket_name)
-
-        # Use endpoint and creds from origin to create url
-        endpoint = origin_node.endpoint
-        access_key = origin_node.access_key_id
-        secret_key = origin_node.secret_access_key
-
-        # Copy object to closest_node using Scheduler
-        storage_data = (cache, closest_node, object_name, "cdn")
-        if not await is_scheduler_in_progress(*storage_data):
-            job = await get_scheduler()
-            await jobs(job,
-                       copy_object_to_node,
-                       args=(AWSS3, object_name, origin_node, closest_node,
-                             cache, Status.IN_PROGRESS.value),
-                       next_run_time=datetime.now())
-            try:
-                job.start()
-            except SchedulerAlreadyRunningError as e:
-                logging.info(e)
-
-    # object doesn't exist on origin location
-    elif not object_ and closest_node.alias == 'origin':
-        # Nothing to be copied. Raise exception
-        raise await object_not_exist(object_name, settings.bucket_name)
-
-    client = MinioS3(endpoint=endpoint,
-                     access_key=access_key,
-                     secret_key=secret_key,
-                     secure=False)
+    client, endpoint = await get_client_data(active_nodes,
+                                             cache,
+                                             closest_node,
+                                             object_name,
+                                             scheduler)
 
     url = await client.get_url(bucket_name=settings.bucket_name,
                                object_name=object_name)
@@ -125,7 +75,7 @@ async def object_status(
         )
 
 
-@router.post('/upload_object',
+@router.post('/object',
              response_model=None,
              summary="Upload object to storage",
              )
@@ -137,24 +87,11 @@ async def upload_object(
     origin_node = await origin_is_alive(active_nodes)
     filename = file_upload.filename
 
-    await object_already_uploaded(cache,
-                                  origin_node,
-                                  filename,
-                                  collection="api")
-
-    endpoint = 'http://' + origin_node.endpoint
-    origin_client_dict = {
-        'endpoint': endpoint,
-        'aws_access_key_id': origin_node.access_key_id,
-        'aws_secret_access_key': origin_node.secret_access_key,
-        'verify': False}
-
-    origin_client: S3MultipartUpload = S3MultipartUpload(
-        settings.bucket_name,
+    endpoint, origin_client = await get_multipart_upload_client_data(
+        cache,
+        file_upload,
         filename,
-        content_type=file_upload.content_type,
-        total_bytes=file_upload.size,
-        **origin_client_dict)
+        origin_node)
 
     mpu_id = await get_mpu_id(endpoint, filename, cache)
 
@@ -172,7 +109,7 @@ async def upload_object(
         )
 
 
-@router.delete('/delete_object',
+@router.delete('/object',
                response_model=None,
                summary="Delete object from all nodes",
                )
@@ -182,31 +119,7 @@ async def delete_object(
 ) -> str | HTTPException:
     active_nodes = await get_active_nodes()
 
-    endpoints = []
-    for node in active_nodes.values():
-        object_ = await get_object(MinioS3,
-                                   settings.bucket_name,
-                                   object_name,
-                                   node)
-        if not object_:
-            logging.info(f"{object_name} doesn't exist on {node.endpoint}")
-            continue
-        client = MinioS3(endpoint=node.endpoint,
-                         access_key=node.access_key_id,
-                         secret_key=node.secret_access_key,
-                         secure=False)
-        await client.remove_object(settings.bucket_name,
-                                   object_name)
-        endpoint = 'http://' + node.endpoint
-        endpoints.append(endpoint)
-        key_api = f"api^{object_name}^{endpoint}"
-        key_cdn = f"cdn^{object_name}^{endpoint}"
-        await cache.delete_from_cache_by_id(key_api)
-        await cache.delete_from_cache_by_id(key_cdn)
-    if not endpoints:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"{object_name} doesn't exist on all nodes!",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    endpoints = await process_deleting_object(active_nodes,
+                                              cache,
+                                              object_name)
     return f"{object_name} was removed from nodes {endpoints}"

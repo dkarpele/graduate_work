@@ -1,23 +1,23 @@
 @startuml
 skinparam componentStyle uml2
 
-actor Manager
+actor Moderator
 actor Client
-component API_service_upload
-component API_service_get
+component API_upload_object
+component API_get_object
 database S3
 
-database Redis
+database Cache
 component Scheduler
 
 
-Manager -right-> API_service_upload: Upload File
+Moderator -right-> API_upload_object: Upload File
 
-API_service_upload -right-> S3: Upload file to S3
-S3 <-right- API_service_get: Gets File from CDN
-API_service_get <-right-> Client: Client gets expected file\nfrom the closest location
-API_service_upload -down-> Redis: Save information about\nlatest uploaded part to S3
-Scheduler <-left-> Redis: Periodically checks\nnon-finished uploads
-Scheduler -up-> S3: Upload file to S3,\nUpdate data in database (status=Finished)
+API_upload_object -right-> S3: Multipart file\nupload to S3
+S3 <-right- API_get_object: Gets File from S3
+API_get_object <-right-> Client: Client gets expected file\nfrom the closest location
+API_upload_object -down-> Cache: Save information about\nlatest uploaded part to S3
+Scheduler <-left-> Cache: Periodically checks\nnon-finished uploads
+Scheduler -up-> S3: Upload file to S3,\nUpdate data in database
 
 @enduml

@@ -2,20 +2,20 @@
 
 ==Successful upload==
 
-Manager -> API_service_upload: Send File
+Moderator -> API_upload_object: Send File
 
-activate API_service_upload
-API_service_upload -> S3: Upload File
-API_service_upload --> redis: Save file info and status
-deactivate API_service_upload
+activate API_upload_object
+API_upload_object -> S3: Upload File
+API_upload_object --> Cache: Save file info and status
+deactivate API_upload_object
 
 activate S3
 
-S3 <- API_service_get: Gets File from CDN
-redis <- API_service_get: Checks file status
-activate API_service_get
-API_service_get <-> Client: Client gets expected file
-deactivate API_service_get
+S3 <- API_get_object: Gets File from S3
+Cache <- API_get_object: Checks file status
+activate API_get_object
+API_get_object <-> Client: Client gets expected file
+deactivate API_get_object
 deactivate S3
 
 @enduml

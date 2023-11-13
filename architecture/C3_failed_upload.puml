@@ -2,19 +2,19 @@
 
 ==Start after failure. It works the same for manual file upload and\nCDN (upload from origin node to edge).==
 
-Scheduler <--> redis: Scheduler gets file\ndata from DB
-activate redis
-activate Scheduler
-Scheduler -> redis: Update file status
-deactivate redis
-Scheduler -> S3: Multipart File Upload
-deactivate Scheduler
+Scheduler_OR_Moderator <--> Cache: Gets file data from cache
+activate Cache
+activate Scheduler_OR_Moderator
+Scheduler_OR_Moderator -> Cache: Update file status
+deactivate Cache
+Scheduler_OR_Moderator -> S3: Multipart File Upload
+deactivate Scheduler_OR_Moderator
 
 activate S3
 
-S3 <- API_service_get: Gets File from CDN
-activate API_service_get
-API_service_get <-> Client: Client gets expected file
-deactivate API_service_get
+S3 <- API_get_object: Gets File from S3
+activate API_get_object
+API_get_object <-> Client: Client gets expected file
+deactivate API_get_object
 deactivate S3
 @enduml
